@@ -54,7 +54,7 @@
     <el-form :model="mailForm" label-width="120px" style="max-width: 500px;" v-loading="mailLoading">
       <el-form-item label="启用掉线通知">
         <el-switch v-model="mailForm.mailEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">账号异常断线时发送邮件提醉</span>
+        <span class="field-hint" style="margin-left: 10px;">账号异常断线时发送邮件提醒</span>
       </el-form-item>
       <el-form-item label="接收邮箱">
         <el-input
@@ -69,7 +69,31 @@
       </el-form-item>
     </el-form>
     <el-alert type="info" :closable="false" style="margin-top: 8px;">
-      <span>SMTP 发件配置（服务器，所用邮箱，授权码）通过环境变量 <code>MAIL_HOST</code> / <code>MAIL_USER</code> / <code>MAIL_PASS</code> 酭置。</span>
+      <span>SMTP 发件配置（服务器，所用邮箱，授权码）通过环境变量 <code>MAIL_HOST</code> / <code>MAIL_USER</code> / <code>MAIL_PASS</code> 配置。</span>
+    </el-alert>
+  </div>
+
+  <!-- 汇报设置 -->
+  <div class="section-card" style="margin-top: 20px;">
+    <div class="section-header">
+      <h3 class="section-title">📊 定时汇报</h3>
+    </div>
+    <el-form :model="reportForm" label-width="120px" style="max-width: 500px;" v-loading="reportLoading">
+      <el-form-item label="每小时汇报">
+        <el-switch v-model="reportForm.hourlyEnabled" />
+        <span class="field-hint" style="margin-left: 10px;">每小时整点发送收获/偷菜统计邮件</span>
+      </el-form-item>
+      <el-form-item label="每日汇报">
+        <el-switch v-model="reportForm.dailyEnabled" />
+        <span class="field-hint" style="margin-left: 10px;">每天早上 8:00 发送昨日统计汇总邮件</span>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="saveReportConfig" :loading="reportSaving">保存设置</el-button>
+        <el-button @click="sendTestReport('hourly')" :loading="reportTesting" style="margin-left: 10px;">发送测试汇报</el-button>
+      </el-form-item>
+    </el-form>
+    <el-alert type="warning" :closable="false" style="margin-top: 8px;">
+      <span>汇报邮件将发送至上方配置的接收邮箱地址，请确保已正确配置。</span>
     </el-alert>
   </div>
 
@@ -120,7 +144,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getAccounts, getMailSettings, saveMailSettings } from '../api/index.js'
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getAccounts, getMailSettings, saveMailSettings, getReportSettings, saveReportSettings, testReport } from '../api/index.js'
 
 const users = ref([])
 const loading = ref(false)
@@ -260,10 +284,57 @@ async function saveMailConfig() {
   }
 }
 
+// 汇报设置
+const reportForm = ref({ hourlyEnabled: false, dailyEnabled: false })
+const reportLoading = ref(false)
+const reportSaving = ref(false)
+const reportTesting = ref(false)
+
+async function fetchReportSettings() {
+  reportLoading.value = true
+  try {
+    const res = await getReportSettings()
+    if (res.ok && res.data) {
+      reportForm.value.hourlyEnabled = !!res.data.hourlyEnabled
+      reportForm.value.dailyEnabled = !!res.data.dailyEnabled
+    }
+  } catch { /* ignore */ } finally {
+    reportLoading.value = false
+  }
+}
+
+async function saveReportConfig() {
+  reportSaving.value = true
+  try {
+    await saveReportSettings({
+      hourlyEnabled: reportForm.value.hourlyEnabled,
+      dailyEnabled: reportForm.value.dailyEnabled
+    })
+    ElMessage.success('汇报设置已保存')
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    reportSaving.value = false
+  }
+}
+
+async function sendTestReport(type) {
+  reportTesting.value = true
+  try {
+    await testReport(type)
+    ElMessage.success('测试汇报已发送，请检查邮箱')
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || e.message)
+  } finally {
+    reportTesting.value = false
+  }
+}
+
 onMounted(() => {
   fetchUsers()
   fetchAccounts()
   fetchMailSettings()
+  fetchReportSettings()
 })
 </script>
 

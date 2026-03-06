@@ -96,4 +96,20 @@ async function sendDisconnectAlert(uin, nickname, reason, to) {
     }
 }
 
-module.exports = { sendDisconnectAlert };
+/**
+ * 通用邮件发送方法 (供汇报等模块复用)
+ * @param {{ to: string, subject: string, html: string }} options
+ */
+async function sendMail({ to, subject, html }) {
+    if (!to) throw new Error('收件人不能为空');
+    const transport = getTransporter();
+    if (!transport) throw new Error('SMTP 未配置 (MAIL_USER / MAIL_PASS)');
+    await transport.sendMail({
+        from: `"QQ农场机器人" <${MAIL_USER}>`,
+        to,
+        subject,
+        html,
+    });
+}
+
+module.exports = { sendDisconnectAlert, sendMail };

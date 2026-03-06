@@ -26,6 +26,9 @@ const { botManager } = require('./bot-manager');
 // ---------- 路由 ----------
 const apiRoutes = require('./routes');
 
+// ---------- 汇报服务 ----------
+const { startScheduler: startReportScheduler, stopScheduler: stopReportScheduler } = require('./report-service');
+
 const PORT = process.env.PORT || 3000;
 
 async function main() {
@@ -148,6 +151,9 @@ async function main() {
     // 6. 自动启动之前配置了 auto_start 的 Bot
     await botManager.autoStartBots();
 
+    // 7. 启动汇报调度器
+    startReportScheduler(botManager);
+
     // 7. 启动 HTTP 服务器
     server.listen(PORT, () => {
         console.log('');
@@ -161,6 +167,7 @@ async function main() {
     // 8. 优雅退出
     const gracefulShutdown = () => {
         console.log('\n[Server] 正在关闭...');
+        stopReportScheduler();
         botManager.shutdown();
         db.closeDatabase();
         // 先关闭所有 Socket.io 连接

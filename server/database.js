@@ -503,6 +503,133 @@ function saveMailSettings(mailTo, mailEnabled) {
     saveToFile();
 }
 
+// ============ 汇报设置 ============
+
+function getReportSettings() {
+    const hourlyRow = queryOne(`SELECT value FROM system_settings WHERE key='report_hourly_enabled'`);
+    const dailyRow = queryOne(`SELECT value FROM system_settings WHERE key='report_daily_enabled'`);
+    return {
+        hourlyEnabled: hourlyRow ? hourlyRow.value === '1' : false,
+        dailyEnabled: dailyRow ? dailyRow.value === '1' : false,
+    };
+}
+
+function saveReportSettings(hourlyEnabled, dailyEnabled) {
+    const upsert = (key, val) => {
+        const exists = queryOne(`SELECT key FROM system_settings WHERE key=?`, [key]);
+        if (exists) {
+            run(`UPDATE system_settings SET value=? WHERE key=?`, [val, key]);
+        } else {
+            run(`INSERT INTO system_settings (key, value) VALUES (?,?)`, [key, val]);
+        }
+    };
+    upsert('report_hourly_enabled', hourlyEnabled ? '1' : '0');
+    upsert('report_daily_enabled', dailyEnabled ? '1' : '0');
+    saveToFile();
+}
+
+// ============ 汇报统计查询 ============
+
+/**
+ * 跨账号汇总统计 (按 action+target)
+ * @param {number} hours - 回溯小时数
+ */
+function getReportStatistics(hours) {
+    const rawStats = queryAll(
+        `SELECT action, target, SUM(amount) as total_amount, SUM(gold) as total_gold
+         FROM bot_statistics
+         WHERE created_at >= datetime('now', '-${hours} hours', 'localtime')
+         GROUP BY action, target
+         ORDER BY total_amount DESC`,
+        []
+    );
+    const harvest = [];
+    const steal = [];
+    for (const row of rawStats) {
+        const item = { target: row.target || '未知', amount: row.total_amount || 0, gold: row.total_gold || 0 };
+        if (row.action === 'harvest') harvest.push(item);
+        else if (row.action === 'steal') steal.push(item);
+    }
+    return { harvest, steal };
+}
+
+/**
+ * 偷菜好友排行榜
+ * target 字段格式为 "好友名: 作物名"，我们按好友名聚合
+ * @param {number} hours - 回溯小时数
+ */
+function getStealRanking(hours) {
+    const rawStats = queryAll(
+        `SELECT target, SUM(amount) as total_amount, SUM(gold) as total_gold
+         FROM bot_statistics
+         WHERE action = 'steal' AND created_at >= datetime('now', '-${hours} hours', 'localtime')
+         GROUP BY target
+         ORDER BY total_amount DESC`,
+        []
+    );
+    // target 格式: "好友名: 作物"，按好友名聚合
+    const friendMap = new Map();
+    for (const row of rawStats) {
+        const parts = String(row.target || '').split(':');
+        const friendName = (parts[0] || '未知').trim();
+        if (!friendMap.has(friendName)) {
+            friendMap.set(friendName, { friendName, amount: 0, gold: 0 });
+        }
+        const entry = friendMap.get(friendName);
+        entry.amount += row.total_amount || 0;
+        entry.gold += row.total_gold || 0;
+    }
+    return Array.from(friendMap.values()).sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * 单账号统计 (按 action+target)
+ */
+function getReportStatisticsByUin(uin, hours) {
+    const rawStats = queryAll(
+        `SELECT action, target, SUM(amount) as total_amount, SUM(gold) as total_gold
+         FROM bot_statistics
+         WHERE user_uin = ? AND created_at >= datetime('now', '-${hours} hours', 'localtime')
+         GROUP BY action, target
+         ORDER BY total_amount DESC`,
+        [uin]
+    );
+    const harvest = [];
+    const steal = [];
+    for (const row of rawStats) {
+        const item = { target: row.target || '未知', amount: row.total_amount || 0, gold: row.total_gold || 0 };
+        if (row.action === 'harvest') harvest.push(item);
+        else if (row.action === 'steal') steal.push(item);
+    }
+    return { harvest, steal };
+}
+
+/**
+ * 单账号偷菜好友排行
+ */
+function getStealRankingByUin(uin, hours) {
+    const rawStats = queryAll(
+        `SELECT target, SUM(amount) as total_amount, SUM(gold) as total_gold
+         FROM bot_statistics
+         WHERE action = 'steal' AND user_uin = ? AND created_at >= datetime('now', '-${hours} hours', 'localtime')
+         GROUP BY target
+         ORDER BY total_amount DESC`,
+        [uin]
+    );
+    const friendMap = new Map();
+    for (const row of rawStats) {
+        const parts = String(row.target || '').split(':');
+        const friendName = (parts[0] || '未知').trim();
+        if (!friendMap.has(friendName)) {
+            friendMap.set(friendName, { friendName, amount: 0, gold: 0 });
+        }
+        const entry = friendMap.get(friendName);
+        entry.amount += row.total_amount || 0;
+        entry.gold += row.total_gold || 0;
+    }
+    return Array.from(friendMap.values()).sort((a, b) => b.amount - a.amount);
+}
+
 /** 确保存在默认管理员 (首次运行时) */
 function ensureDefaultAdmin() {
     const admin = getAdminUser('admin');
@@ -560,4 +687,11 @@ module.exports = {
     // 邮件设置
     getMailSettings,
     saveMailSettings,
+    // 汇报
+    getReportSettings,
+    saveReportSettings,
+    getReportStatistics,
+    getStealRanking,
+    getReportStatisticsByUin,
+    getStealRankingByUin,
 };

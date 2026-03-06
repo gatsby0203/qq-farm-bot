@@ -138,8 +138,21 @@ router.post('/accounts/add-by-code', async (req, res) => {
         // 保存 session
         db.saveSession(uin, code);
 
-        // 启动 bot
-        await botManager._startBot(uin, code, { platform: actualPlatform, farmInterval, friendInterval });
+        // 启动 bot 时复用 DB 的已有配置（特别是功能开关、日统计及间隔等，防止参数被重置为空）
+        user = db.getUserByUin(uin);
+        const startOpts = { platform: actualPlatform };
+        if (user) {
+            if (user.feature_toggles) startOpts.featureToggles = JSON.parse(user.feature_toggles);
+            if (user.daily_stats) startOpts.dailyStats = JSON.parse(user.daily_stats);
+            if (user.daily_reward_state) startOpts.dailyRewardState = JSON.parse(user.daily_reward_state);
+            startOpts.preferredSeedId = user.preferred_seed_id || 0;
+
+            // 如果前端没有明确传入指定值，则保留 DB 中已有的值
+            startOpts.farmInterval = farmInterval || user.farm_interval || 10000;
+            startOpts.friendInterval = friendInterval || user.friend_interval || 10000;
+        }
+
+        await botManager._startBot(uin, code, startOpts);
 
         // 普通用户添加账号时，自动绑定到该用户
         if (req.user.role !== 'admin') {
@@ -569,6 +582,45 @@ router.put('/announcement', adminOnly, (req, res) => {
         if (io) io.emit('announcement:update', announcement);
         res.json({ ok: true, data: announcement });
     } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ============================================================
+//  汇报设置
+// ============================================================
+
+const { generateAndSendReport } = require('./report-service');
+
+/** GET /api/admin/settings/report */
+router.get('/admin/settings/report', adminOnly, (req, res) => {
+    try {
+        const settings = db.getReportSettings();
+        res.json({ ok: true, data: settings });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** PUT /api/admin/settings/report */
+router.put('/admin/settings/report', adminOnly, (req, res) => {
+    try {
+        const { hourlyEnabled, dailyEnabled } = req.body || {};
+        db.saveReportSettings(!!hourlyEnabled, !!dailyEnabled);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** POST /api/admin/report/test - 手动触发测试汇报 */
+router.post('/admin/report/test', adminOnly, async (req, res) => {
+    try {
+        const { type = 'hourly' } = req.body || {};
+        await generateAndSendReport(type, true); // true = 强制发送（忽略 enabled 设置）
+        res.json({ ok: true, message: '测试汇报已发送' });
+    } catch (err) {
+        console.error('[API 测试汇报失败]', err);
         res.status(500).json({ ok: false, error: err.message });
     }
 });

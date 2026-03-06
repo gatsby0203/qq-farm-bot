@@ -159,4 +159,18 @@ export function saveMailSettings(data) {
   return api.put('/admin/settings/mail', data)
 }
 
+// ============ 汇报设置 API ============
+
+export function getReportSettings() {
+  return api.get('/admin/settings/report')
+}
+
+export function saveReportSettings(data) {
+  return api.put('/admin/settings/report', data)
+}
+
+export function testReport(type = 'hourly') {
+  return api.post('/admin/report/test', { type })
+}
+
 export default api

@@ -219,25 +219,36 @@ onUnmounted(stopCountdown)
 
 function handleSubmit() {
   if (!form.value.uin.trim()) return
-  emit('confirm', {
+  // 如果是预填的已存在账号，且没有在界面上修改过，最好不要发送这些参数覆盖后端配置。
+  // 但简单处理：如果不发送 farmInterval 和 friendInterval，后端会使用现有配置。
+  const data = {
     uin: form.value.uin.trim(),
     platform: form.value.platform,
-    farmInterval: form.value.farmIntervalSec * 1000,
-    friendInterval: form.value.friendIntervalSec * 1000,
-  })
+  }
+  // 仅在手动输入新账号或真正想修改时才发送，但这里没有记录是否修改。
+  // 把它们发送过去会导致覆盖。如果在 AccountHome 重新登入，我们只需不发送即可保持原有配置。
+  if (!props.initialUin) {
+    data.farmInterval = form.value.farmIntervalSec * 1000;
+    data.friendInterval = form.value.friendIntervalSec * 1000;
+  }
+  emit('confirm', data)
 }
 
 function handleManualSubmit() {
   if (!manualForm.value.authCode.trim()) return
   if (manualForm.value.platform === 'qq' && !manualForm.value.uin.trim()) return
-  emit('confirm', {
+  
+  const data = {
     uin: manualForm.value.uin.trim(),
     platform: manualForm.value.platform,
-    farmInterval: manualForm.value.farmIntervalSec * 1000,
-    friendInterval: manualForm.value.friendIntervalSec * 1000,
     code: manualForm.value.authCode.trim(),
     manual: true,
-  })
+  }
+  if (!props.initialUin) {
+    data.farmInterval = manualForm.value.farmIntervalSec * 1000;
+    data.friendInterval = manualForm.value.friendIntervalSec * 1000;
+  }
+  emit('confirm', data)
 }
 
 function handleClose() {
