@@ -470,22 +470,28 @@ onUnmounted(() => {
 
 <style scoped>
 .user-profile-card {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  padding: 32px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  background: var(--bg-surface);
+  gap: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 20px;
-  margin-bottom: 16px;
-  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.user-profile-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
-  border: 3px solid var(--border-strong);
+  border: 4px solid var(--bg-base);
+  box-shadow: var(--shadow);
   object-fit: cover;
   background: var(--bg-hover);
   flex-shrink: 0;
@@ -506,16 +512,22 @@ onUnmounted(() => {
 .info-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .info-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 20px 16px;
+  text-align: center;
   box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .info-label {
@@ -535,15 +547,15 @@ onUnmounted(() => {
 .info-value.name { font-size: 18px; }
 
 .status-bar {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  gap: 16px;
+  margin-bottom: 24px;
   box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 
 .uptime-text {
@@ -595,8 +607,9 @@ onUnmounted(() => {
 
 .toggle-group-title {
   font-size: 13px;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.5px;
   margin-bottom: 12px;
 }
 
@@ -652,17 +665,21 @@ onUnmounted(() => {
 .extra-data-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .extra-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 12px 16px;
-  color: var(--text);
+  padding: 20px;
   box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+.extra-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .extra-card-header {

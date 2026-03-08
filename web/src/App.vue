@@ -12,23 +12,23 @@ useThemeStore()
 /* ============ CSS 变量：暗色主题 (默认) ============ */
 :root,
 html[data-theme="dark"] {
-  --bg-base: #0d1117;
-  --bg-surface: #161b22;
-  --bg-hover: #1c2128;
+  --bg-base: #010409;
+  --bg-surface: #0d1117;
+  --bg-hover: #161b22;
   --bg-inset: #010409;
-  --border: #21262d;
-  --border-strong: #30363d;
-  --text: #e6edf3;
+  --border: #30363d;
+  --border-strong: #484f58;
+  --text: #f0f6fc;
   --text-secondary: #c9d1d9;
   --text-muted: #8b949e;
   --text-faint: #484f58;
   --accent: #58a6ff;
-  --accent-bg: #1f6feb33;
+  --accent-bg: rgba(31, 111, 235, 0.2);
   --color-success: #3fb950;
   --color-warning: #d29922;
   --color-danger: #f85149;
-  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow: 0 4px 6px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.8);
   --login-gradient: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
   --sidebar-bg: none;
   --sidebar-text: #e6edf3;
@@ -36,36 +36,36 @@ html[data-theme="dark"] {
   --sidebar-text-faint: #484f58;
   --sidebar-border: #21262d;
   --sidebar-hover: #21262d;
-  --sidebar-active-bg: #1f6feb33;
+  --sidebar-active-bg: rgba(31, 111, 235, 0.2);
 }
 
 /* ============ CSS 变量：日间主题 ============ */
 html[data-theme="light"] {
-  --bg-base: #f0f2f5;
+  --bg-base: #f8fafc;
   --bg-surface: #ffffff;
-  --bg-hover: #f5f7fa;
-  --bg-inset: #f0f2f5;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --text: #1e293b;
+  --bg-hover: #f1f5f9;
+  --bg-inset: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
   --text-secondary: #334155;
   --text-muted: #64748b;
   --text-faint: #94a3b8;
-  --accent: #4f7cff;
-  --accent-bg: rgba(79,124,255,0.08);
+  --accent: #3b82f6;
+  --accent-bg: rgba(59, 130, 246, 0.1);
   --color-success: #16a34a;
   --color-warning: #ca8a04;
   --color-danger: #dc2626;
-  --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
-  --login-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --sidebar-bg: linear-gradient(180deg, #1e293b 0%, #334155 100%);
-  --sidebar-text: #e2e8f0;
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --login-gradient: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+  --sidebar-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  --sidebar-text: #f1f5f9;
   --sidebar-text-muted: #94a3b8;
   --sidebar-text-faint: #64748b;
-  --sidebar-border: rgba(255,255,255,0.08);
-  --sidebar-hover: rgba(255,255,255,0.06);
-  --sidebar-active-bg: rgba(79,124,255,0.18);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-hover: rgba(255, 255, 255, 0.1);
+  --sidebar-active-bg: rgba(59, 130, 246, 0.2);
 
   /* Element Plus 组件覆盖 */
   --el-bg-color: #ffffff;

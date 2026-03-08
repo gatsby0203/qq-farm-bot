@@ -272,13 +272,17 @@ function formatUptime(ms) {
 
 <style scoped>
 .account-list-card {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 4px 8px;
 }
 
 .card-title {
@@ -288,7 +292,8 @@ function formatUptime(ms) {
 
 .gold-text {
   color: #E6A23C;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .error-text {
