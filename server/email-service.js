@@ -39,7 +39,7 @@ function getTransporter() {
 
 /**
  * 发送账号掉线通知邮件
- * @param {string} uin - 账号 QQ 号
+ * @param {string} uin - 账号标识
  * @param {string} nickname - 账号昵称
  * @param {string} reason - 掉线原因（errorMessage）
  * @param {string} to - 接收邮件的地址（从数据库设置中读取）

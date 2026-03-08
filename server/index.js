@@ -141,22 +141,6 @@ async function main() {
         io.emit('bot:stateUpdate', data);
     });
 
-    botManager.on('qrExpired', (data) => {
-        io.emit('qr:expired', data);
-    });
-
-    botManager.on('qrScanned', (data) => {
-        io.emit('qr:scanned', data);
-    });
-
-    botManager.on('qrError', (data) => {
-        io.emit('qr:error', data);
-    });
-
-    botManager.on('qrCancelled', (data) => {
-        io.emit('qr:cancelled', data);
-    });
-
     botManager.on('botError', (data) => {
         io.emit('bot:error', data);
     });

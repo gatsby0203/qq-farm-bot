@@ -3,10 +3,16 @@
     <div class="section-card">
       <div class="section-header">
         <h3 class="section-title">用户管理</h3>
-        <el-button type="primary" size="small" @click="openAdd">
-          <el-icon style="margin-right:4px"><Plus /></el-icon>
-          添加用户
-        </el-button>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="field-hint">允许注册</span>
+            <el-switch v-model="registrationEnabled" @change="toggleRegistration" />
+          </div>
+          <el-button type="primary" size="small" @click="openAdd">
+            <el-icon style="margin-right:4px"><Plus /></el-icon>
+            添加用户
+          </el-button>
+        </div>
       </div>
 
       <el-table
@@ -26,7 +32,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="可访问QQ" min-width="200">
+        <el-table-column label="可访问账号" min-width="200">
           <template #default="{ row }">
             <span v-if="row.role === 'admin'" class="hint-text">全部</span>
             <span v-else-if="row.allowedUins && row.allowedUins.length">
@@ -67,18 +73,16 @@
             <el-option label="普通用户" value="user" />
           </el-select>
         </el-form-item>
-        <el-form-item label="可访问QQ" v-if="form.role === 'user'">
+        <el-form-item label="可访问账号" v-if="form.role === 'user'">
           <el-select
             v-model="form.allowedUins"
             multiple
-            filterable
-            allow-create
-            placeholder="输入或选择QQ号"
+            placeholder="请选择账号"
             style="width: 100%"
           >
             <el-option v-for="uin in allUins" :key="uin" :label="uin" :value="uin" />
           </el-select>
-          <div class="field-hint">管理员可访问所有账号，普通用户仅限已分配的</div>
+          <div class="field-hint">管理员可访问所有账号，普通用户仅限已分配账号</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -94,6 +98,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getAccounts } from '../api/index.js'
+import api from '../api/index.js'
 
 const users = ref([])
 const loading = ref(false)
@@ -101,6 +106,24 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
 const allUins = ref([])
+const registrationEnabled = ref(true)
+
+async function fetchRegistration() {
+  try {
+    const { data } = await api.get('/admin/registration-enabled')
+    if (data?.ok) registrationEnabled.value = data.data.enabled
+  } catch { /* */ }
+}
+
+async function toggleRegistration(val) {
+  try {
+    await api.put('/admin/registration-enabled', { enabled: val })
+    ElMessage.success(val ? '已开启注册' : '已关闭注册')
+  } catch (e) {
+    registrationEnabled.value = !val
+    ElMessage.error(e.response?.data?.error || e.message)
+  }
+}
 
 const form = ref({
   id: null,
@@ -194,6 +217,7 @@ async function handleDelete(row) {
 onMounted(() => {
   fetchUsers()
   fetchAccounts()
+  fetchRegistration()
 })
 </script>
 

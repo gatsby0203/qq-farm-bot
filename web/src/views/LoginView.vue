@@ -18,14 +18,14 @@
         </div>
       </div>
 
-      <!-- 登录/注册切换（首次初始化时隐藏 tab，强制显示注册） -->
-      <div v-if="!isFirstSetup" class="tab-switch">
+      <!-- 登录/注册切换（仅在非首次初始化且允许注册时展示） -->
+      <div v-if="!isFirstSetup && registrationEnabled" class="tab-switch">
         <div class="tab-item" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</div>
         <div class="tab-item" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</div>
       </div>
 
       <!-- 登录表单 -->
-      <el-form v-if="mode === 'login' && !isFirstSetup" :model="form" @submit.prevent="handleLogin" class="login-form">
+      <el-form v-if="!showRegisterForm" :model="form" @submit.prevent="handleLogin" class="login-form">
         <el-form-item>
           <el-input
             v-model="form.username"
@@ -102,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -114,8 +114,13 @@ const auth = useAuthStore()
 const loading = ref(false)
 const mode = ref('login')
 const isFirstSetup = ref(false)
+const registrationEnabled = ref(true)
 const form = ref({ username: '', password: '' })
 const regForm = ref({ username: '', password: '', confirmPassword: '' })
+const showRegisterForm = computed(() => {
+  if (isFirstSetup.value) return true
+  return registrationEnabled.value && mode.value === 'register'
+})
 
 // 已登录直接跳转
 if (auth.isLoggedIn) router.replace('/dashboard')
@@ -124,9 +129,12 @@ if (auth.isLoggedIn) router.replace('/dashboard')
 onMounted(async () => {
   try {
     const { data } = await api.get('/system/setup-status')
-    if (data?.data?.isFirstSetup) {
-      isFirstSetup.value = true
+    isFirstSetup.value = !!data?.data?.isFirstSetup
+    registrationEnabled.value = data?.data?.registrationEnabled !== false
+    if (isFirstSetup.value) {
       mode.value = 'register'
+    } else {
+      mode.value = 'login'
     }
   } catch { /* 忽略网络异常，默认登录模式 */ }
 })

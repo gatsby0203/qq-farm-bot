@@ -76,15 +76,6 @@ export function getAccountDailyStatistics(uin, days = 7) {
   return api.get(`/accounts/${uin}/daily-statistics`, { params: { days } })
 }
 
-// QR 登录
-export function startQrLogin(uin, opts = {}) {
-  return api.post(`/accounts/${uin}/qr-login`, opts)
-}
-
-export function cancelQrLogin(uin) {
-  return api.post(`/accounts/${uin}/qr-cancel`)
-}
-
 // 手动添加账号（通过 authCode）
 export function addAccountByCode(data) {
   return api.post('/accounts/add-by-code', data)

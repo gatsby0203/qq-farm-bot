@@ -47,7 +47,9 @@ router.post('/auth/login', (req, res) => {
 router.get('/system/setup-status', (req, res) => {
     try {
         const adminCount = db.getAllAdminUsers().length;
-        res.json({ ok: true, data: { isFirstSetup: adminCount === 0 } });
+        const isFirstSetup = adminCount === 0;
+        const registrationEnabled = isFirstSetup || db.getRegistrationEnabled();
+        res.json({ ok: true, data: { isFirstSetup, registrationEnabled } });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
     }
@@ -64,6 +66,9 @@ router.post('/auth/register', (req, res) => {
 
         // 如果目前系统里没有任何管理员，第一个注册的直接为 admin
         const isFirstUser = db.getAllAdminUsers().length === 0;
+        if (!isFirstUser && !db.getRegistrationEnabled()) {
+            return res.status(403).json({ ok: false, error: '管理员已关闭注册' });
+        }
         const assignedRole = isFirstUser ? 'admin' : 'user';
 
         db.createAdminUser({ username, passwordHash: hashPassword(password), role: assignedRole });
@@ -371,45 +376,6 @@ router.get('/crop-list', (req, res) => {
 });
 
 // ============================================================
-//  QR 扫码登录
-// ============================================================
-
-/** POST /api/accounts/:uin/qr-login (Frontend is currently isolating this feature) */
-router.post('/accounts/:uin/qr-login', async (req, res) => {
-    try {
-        const { uin } = req.params;
-        const { platform, farmInterval, friendInterval } = req.body || {};
-        const result = await botManager.startQrLogin(uin, { platform, farmInterval, friendInterval });
-
-        // 普通用户添加账号时，自动绑定到该用户
-        if (req.user.role !== 'admin') {
-            const adminUser = db.getAdminUserById(req.user.id);
-            if (adminUser) {
-                const currentUins = (adminUser.allowed_uins || '').split(',').map(s => s.trim()).filter(Boolean);
-                if (!currentUins.includes(uin)) {
-                    currentUins.push(uin);
-                    db.updateAdminUser(adminUser.id, { allowed_uins: currentUins.join(',') });
-                }
-            }
-        }
-
-        res.json({ ok: true, data: result });
-    } catch (err) {
-        res.status(400).json({ ok: false, error: err.message });
-    }
-});
-
-/** POST /api/accounts/:uin/qr-cancel */
-router.post('/accounts/:uin/qr-cancel', canAccessUin, (req, res) => {
-    try {
-        botManager.cancelQrLogin(req.params.uin);
-        res.json({ ok: true });
-    } catch (err) {
-        res.status(400).json({ ok: false, error: err.message });
-    }
-});
-
-// ============================================================
 //  Bot 启停
 // ============================================================
 
@@ -538,6 +504,26 @@ router.put('/admin/settings/mail', adminOnly, (req, res) => {
 // ============================================================
 //  管理员: 用户管理
 // ============================================================
+
+/** GET /api/admin/registration-enabled */
+router.get('/admin/registration-enabled', adminOnly, (req, res) => {
+    try {
+        res.json({ ok: true, data: { enabled: db.getRegistrationEnabled() } });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** PUT /api/admin/registration-enabled */
+router.put('/admin/registration-enabled', adminOnly, (req, res) => {
+    try {
+        const { enabled } = req.body || {};
+        db.setRegistrationEnabled(!!enabled);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
 
 /** GET /api/admin/users */
 router.get('/admin/users', adminOnly, (req, res) => {

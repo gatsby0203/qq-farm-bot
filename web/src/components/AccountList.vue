@@ -233,7 +233,6 @@ function statusTagType(status) {
   const map = {
     running: 'success',
     connecting: 'warning',
-    'qr-pending': 'warning',
     stopped: 'info',
     idle: 'info',
     error: 'danger',
@@ -245,7 +244,6 @@ function statusText(status) {
   const map = {
     running: '运行中',
     connecting: '连接中',
-    'qr-pending': '扫码中',
     stopped: '已停止',
     idle: '空闲',
     error: '异常',

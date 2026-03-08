@@ -258,15 +258,11 @@
       <el-empty description="暂无数据，请先启动 Bot" />
     </div>
 
-    <!-- QR 扫码登录对话框 -->
-    <QrCodeDialog
-      v-model:visible="qrDialogVisible"
-      :qr-base64="qrBase64"
-      :qr-status="qrStatus"
-      :qr-uin="props.uin"
+    <AccountLoginDialog
+      v-model:visible="loginDialogVisible"
       :initial-uin="props.uin"
-      @confirm="handleQrConfirm"
-      @cancel="handleQrCancel"
+      @confirm="handleLoginConfirm"
+      @cancel="handleDialogCancel"
     />
   </div>
 </template>
@@ -274,9 +270,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getAccountSnapshot, updateToggles, startBot, stopBot, startQrLogin, cancelQrLogin, addAccountByCode } from '../api/index.js'
+import { getAccountSnapshot, updateToggles, stopBot, addAccountByCode } from '../api/index.js'
 import { onEvent, offEvent } from '../socket/index.js'
-import QrCodeDialog from '../components/QrCodeDialog.vue'
+import AccountLoginDialog from '../components/AccountLoginDialog.vue'
 
 const props = defineProps({ uin: String })
 
@@ -288,10 +284,7 @@ const uptime = ref(0)
 let uptimeTimer = null
 let timer = null
 
-// QR 扫码登录状态
-const qrDialogVisible = ref(false)
-const qrBase64 = ref('')
-const qrStatus = ref('idle') // idle | loading | pending | scanned | error
+const loginDialogVisible = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -337,54 +330,28 @@ async function saveToggles() {
 
 async function handleStart() {
   // 无法复用 Session，点击启动直接弹出 Code 登录框
-  qrDialogVisible.value = true
-  qrBase64.value = ''
-  qrStatus.value = 'idle'
+  loginDialogVisible.value = true
 }
 
-async function handleQrConfirm(form) {
-  // 手动输入 authCode 模式
-  if (form.manual && form.code) {
-    qrStatus.value = 'loading'
-    try {
-      await addAccountByCode({
-        code: form.code,
-        uin: form.uin,
-        platform: form.platform,
-        farmInterval: form.farmInterval,
-        friendInterval: form.friendInterval,
-      })
-      ElMessage.success('登录成功')
-      qrDialogVisible.value = false
-      fetchData()
-    } catch (e) {
-      qrStatus.value = 'idle'
-      ElMessage.error(e.message)
-    }
-    return
-  }
-
-  qrStatus.value = 'loading'
+async function handleLoginConfirm(form) {
   try {
-    const res = await startQrLogin(props.uin, {
+    await addAccountByCode({
+      code: form.code,
+      uin: form.uin,
       platform: form.platform,
       farmInterval: form.farmInterval,
       friendInterval: form.friendInterval,
     })
-    qrBase64.value = res.data.qrBase64
-    qrStatus.value = 'pending'
-  } catch (err) {
-    qrStatus.value = 'error'
-    ElMessage.error('获取二维码失败: ' + err.message)
+    ElMessage.success('登录成功')
+    loginDialogVisible.value = false
+    fetchData()
+  } catch (e) {
+    ElMessage.error(e.message)
   }
 }
 
-function handleQrCancel() {
-  if (qrStatus.value === 'pending') {
-    cancelQrLogin(props.uin).catch(() => {})
-  }
-  qrDialogVisible.value = false
-  qrStatus.value = 'idle'
+function handleDialogCancel() {
+  loginDialogVisible.value = false
 }
 
 async function handleStop() {
@@ -425,44 +392,13 @@ function onStateUpdate(data) {
   }
 }
 
-function onQrScanned(data) {
-  if (data.uin === props.uin) {
-    qrStatus.value = 'scanned'
-    ElMessage.success('扫码成功，正在登录...')
-    setTimeout(() => {
-      qrDialogVisible.value = false
-      fetchData()
-    }, 1500)
-  }
-}
-
-function onQrExpired(data) {
-  if (data.uin === props.uin) {
-    qrStatus.value = 'error'
-    ElMessage.warning(data.reason || '二维码已过期')
-  }
-}
-
-function onQrError(data) {
-  if (data.uin === props.uin) {
-    qrStatus.value = 'error'
-    ElMessage.error(data.reason || '扫码出错')
-  }
-}
-
 onMounted(() => {
   fetchData()
   timer = setInterval(fetchData, 5000)
   onEvent('bot:stateUpdate', onStateUpdate)
-  onEvent('qr:scanned', onQrScanned)
-  onEvent('qr:expired', onQrExpired)
-  onEvent('qr:error', onQrError)
 })
 onUnmounted(() => {
   offEvent('bot:stateUpdate', onStateUpdate)
-  offEvent('qr:scanned', onQrScanned)
-  offEvent('qr:expired', onQrExpired)
-  offEvent('qr:error', onQrError)
   stopUptimeTimer()
   if (timer) clearInterval(timer)
 })

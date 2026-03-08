@@ -71,14 +71,11 @@
       @config="handleConfig"
     />
 
-    <!-- 添加账号对话框 (QR 扫码) -->
-    <QrCodeDialog
-      v-model:visible="qrDialogVisible"
-      :qr-base64="qrBase64"
-      :qr-status="qrStatus"
-      :qr-uin="qrUin"
-      @confirm="handleQrConfirm"
-      @cancel="handleQrCancel"
+    <AccountLoginDialog
+      v-model:visible="loginDialogVisible"
+      :initial-uin="dialogUin"
+      @confirm="handleLoginConfirm"
+      @cancel="handleDialogCancel"
     />
 
     <!-- 日志面板 -->
@@ -93,10 +90,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getAccounts, startQrLogin, cancelQrLogin, startBot, stopBot, deleteAccount } from '../api/index.js'
+import { getAccounts, addAccountByCode, startBot, stopBot, deleteAccount } from '../api/index.js'
 import { onEvent, offEvent } from '../socket/index.js'
 import AccountList from '../components/AccountList.vue'
-import QrCodeDialog from '../components/QrCodeDialog.vue'
+import AccountLoginDialog from '../components/AccountLoginDialog.vue'
 import BotLogPanel from '../components/BotLogPanel.vue'
 
 // ============ 账号数据 ============
@@ -119,39 +116,33 @@ async function fetchAccounts() {
   }
 }
 
-// ============ QR 扫码 ============
-const qrDialogVisible = ref(false)
-const qrBase64 = ref('')
-const qrStatus = ref('idle') // idle | loading | pending | scanned | error
-const qrUin = ref('')
+const loginDialogVisible = ref(false)
+const dialogUin = ref('')
 
 function showAddDialog() {
-  qrDialogVisible.value = true
-  qrBase64.value = ''
-  qrStatus.value = 'idle'
-  qrUin.value = ''
+  dialogUin.value = ''
+  loginDialogVisible.value = true
 }
 
-async function handleQrConfirm(form) {
-  const { uin, platform, farmInterval, friendInterval } = form
-  qrUin.value = uin
-  qrStatus.value = 'loading'
+async function handleLoginConfirm(form) {
   try {
-    const res = await startQrLogin(uin, { platform, farmInterval, friendInterval })
-    qrBase64.value = res.data.qrBase64
-    qrStatus.value = 'pending'
+    await addAccountByCode({
+      code: form.code,
+      uin: form.uin,
+      platform: form.platform,
+      farmInterval: form.farmInterval,
+      friendInterval: form.friendInterval,
+    })
+    ElMessage.success('账号添加成功')
+    loginDialogVisible.value = false
+    fetchAccounts()
   } catch (err) {
-    qrStatus.value = 'error'
-    ElMessage.error('获取二维码失败: ' + err.message)
+    ElMessage.error('添加账号失败: ' + err.message)
   }
 }
 
-function handleQrCancel() {
-  if (qrUin.value && qrStatus.value === 'pending') {
-    cancelQrLogin(qrUin.value).catch(() => {})
-  }
-  qrDialogVisible.value = false
-  qrStatus.value = 'idle'
+function handleDialogCancel() {
+  loginDialogVisible.value = false
 }
 
 // ============ Bot 操作 ============
@@ -242,48 +233,17 @@ function onStateUpdate(data) {
   }
 }
 
-function onQrScanned(data) {
-  if (data.uin === qrUin.value) {
-    qrStatus.value = 'scanned'
-    ElMessage.success('扫码成功，正在登录...')
-    setTimeout(() => {
-      qrDialogVisible.value = false
-      fetchAccounts()
-    }, 1500)
-  }
-}
-
-function onQrExpired(data) {
-  if (data.uin === qrUin.value) {
-    qrStatus.value = 'error'
-    ElMessage.warning(data.reason || '二维码已过期')
-  }
-}
-
-function onQrError(data) {
-  if (data.uin === qrUin.value) {
-    qrStatus.value = 'error'
-    ElMessage.error(data.reason || '扫码出错')
-  }
-}
-
 onMounted(() => {
   fetchAccounts()
   onEvent('accounts:list', onAccountsList)
   onEvent('bot:statusChange', onStatusChange)
   onEvent('bot:stateUpdate', onStateUpdate)
-  onEvent('qr:scanned', onQrScanned)
-  onEvent('qr:expired', onQrExpired)
-  onEvent('qr:error', onQrError)
 })
 
 onUnmounted(() => {
   offEvent('accounts:list', onAccountsList)
   offEvent('bot:statusChange', onStatusChange)
   offEvent('bot:stateUpdate', onStateUpdate)
-  offEvent('qr:scanned', onQrScanned)
-  offEvent('qr:expired', onQrExpired)
-  offEvent('qr:error', onQrError)
 })
 </script>
 

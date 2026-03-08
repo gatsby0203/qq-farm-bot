@@ -497,6 +497,23 @@ function saveAnnouncement({ title, content }) {
 
 // ============ 邮件设置 ============
 
+/** 获取是否允许注册 */
+function getRegistrationEnabled() {
+    const row = queryOne(`SELECT value FROM system_settings WHERE key='registration_enabled'`);
+    return row ? row.value === '1' : true; // 默认允许
+}
+
+/** 设置是否允许注册 */
+function setRegistrationEnabled(enabled) {
+    const exists = queryOne(`SELECT key FROM system_settings WHERE key='registration_enabled'`);
+    if (exists) {
+        run(`UPDATE system_settings SET value=? WHERE key='registration_enabled'`, [enabled ? '1' : '0']);
+    } else {
+        run(`INSERT INTO system_settings (key, value) VALUES ('registration_enabled', ?)`, [enabled ? '1' : '0']);
+    }
+    saveToFile();
+}
+
 function getMailSettings() {
     const toRow = queryOne(`SELECT value FROM system_settings WHERE key='mail_to'`);
     const enabledRow = queryOne(`SELECT value FROM system_settings WHERE key='mail_enabled'`); // 原断线邮件开关
@@ -835,4 +852,7 @@ module.exports = {
     saveUserNotificationSettings,
     getAllReportEnabledUsers,
     getDisconnectAlertUsers,
+    // 注册开关
+    getRegistrationEnabled,
+    setRegistrationEnabled,
 };

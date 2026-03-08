@@ -42,7 +42,7 @@
 
     <!-- 操作栏 -->
     <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="showQrDialog = true">添加账号</el-button>
+      <el-button type="primary" :icon="Plus" @click="handleAddAccount">添加账号</el-button>
     </div>
 
     <!-- 账号列表 -->
@@ -107,15 +107,11 @@
       </div>
     </div>
 
-    <!-- QR 扫码登录对话框 -->
-    <QrCodeDialog
-      v-model:visible="showQrDialog"
-      :qr-base64="qrBase64"
-      :qr-status="qrStatus"
-      :qr-uin="qrUin"
-      :initial-uin="qrUin"
-      @confirm="handleQrConfirm"
-      @cancel="handleQrCancel"
+    <AccountLoginDialog
+      v-model:visible="showLoginDialog"
+      :initial-uin="dialogUin"
+      @confirm="handleLoginConfirm"
+      @cancel="handleDialogCancel"
     />
   </div>
 </template>
@@ -125,13 +121,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, VideoPlay, VideoPause, Delete } from '@element-plus/icons-vue'
-import { useAuthStore } from '../stores/auth.js'
-import { getAccounts, startBot, stopBot, deleteAccount, startQrLogin, cancelQrLogin, addAccountByCode } from '../api/index.js'
+import { getAccounts, stopBot, deleteAccount, addAccountByCode } from '../api/index.js'
 import { onEvent, offEvent } from '../socket/index.js'
-import QrCodeDialog from '../components/QrCodeDialog.vue'
+import AccountLoginDialog from '../components/AccountLoginDialog.vue'
 
 const router = useRouter()
-const auth = useAuthStore()
 
 const accounts = ref([])
 const loading = ref(false)
@@ -140,11 +134,8 @@ const runningCount = computed(() => accounts.value.filter(a => a.status === 'run
 const errorCount = computed(() => accounts.value.filter(a => a.status === 'error').length)
 const stoppedCount = computed(() => accounts.value.filter(a => a.status === 'stopped' || a.status === 'idle').length)
 
-// QR Dialog
-const showQrDialog = ref(false)
-const qrBase64 = ref('')
-const qrStatus = ref('idle')
-const qrUin = ref('')
+const showLoginDialog = ref(false)
+const dialogUin = ref('')
 
 
 async function fetchAccounts() {
@@ -157,12 +148,15 @@ async function fetchAccounts() {
   }
 }
 
+function handleAddAccount() {
+  dialogUin.value = ''
+  showLoginDialog.value = true
+}
+
 async function handleStart(uin) {
   // 无法复用 Session，显示 Code 登录框以便重新输入
-  showQrDialog.value = true
-  qrBase64.value = ''
-  qrUin.value = uin
-  qrStatus.value = 'idle'
+  dialogUin.value = uin
+  showLoginDialog.value = true
 }
 
 async function handleStop(uin) {
@@ -177,60 +171,34 @@ async function handleDelete(uin) {
   } catch { /* cancel */ }
 }
 
-async function handleQrConfirm(form) {
-  // 手动输入 authCode 模式 (支持 QQ/微信)
-  if (form.manual && form.code) {
-    try {
-      await addAccountByCode({
-        code: form.code,
-        uin: form.uin,
-        platform: form.platform,
-        farmInterval: form.farmInterval,
-        friendInterval: form.friendInterval,
-      })
-      ElMessage.success('账号添加成功')
-      showQrDialog.value = false
-      fetchAccounts()
-    } catch (e) {
-      ElMessage.error(e.message)
-    }
-    return
-  }
-
-  // 扫码登录模式
-  qrUin.value = form.uin
-  qrStatus.value = 'loading'
+async function handleLoginConfirm(form) {
   try {
-    const res = await startQrLogin(form.uin, {
+    await addAccountByCode({
+      code: form.code,
+      uin: form.uin,
       platform: form.platform,
       farmInterval: form.farmInterval,
       friendInterval: form.friendInterval,
     })
-    qrBase64.value = res.data.qrBase64
-    qrStatus.value = 'pending'
+    ElMessage.success('账号添加成功')
+    showLoginDialog.value = false
+    fetchAccounts()
   } catch (e) {
-    qrStatus.value = 'error'
     ElMessage.error(e.message)
   }
 }
 
-function handleQrCancel() {
-  if (qrUin.value && qrStatus.value === 'pending') cancelQrLogin(qrUin.value).catch(() => {})
-  showQrDialog.value = false
-  qrStatus.value = 'idle'
+function handleDialogCancel() {
+  showLoginDialog.value = false
 }
 
 function formatNum(n) { return n ? Number(n).toLocaleString() : '' }
 
-function isOwnAccount(uin) {
-  return auth.allowedUins.includes(uin)
-}
-
 function statusType(s) {
-  return { running: 'success', error: 'danger', connecting: 'warning', 'qr-pending': 'warning' }[s] || 'info'
+  return { running: 'success', error: 'danger', connecting: 'warning' }[s] || 'info'
 }
 function statusText(s) {
-  return { running: '运行中', error: '异常', connecting: '连接中', 'qr-pending': '扫码中', stopped: '已停止', idle: '空闲' }[s] || s
+  return { running: '运行中', error: '异常', connecting: '连接中', stopped: '已停止', idle: '空闲' }[s] || s
 }
 
 // Socket.io
@@ -239,26 +207,13 @@ function onStatusChange(data) {
   if (idx >= 0) accounts.value[idx].status = data.newStatus
   else fetchAccounts()
 }
-function onQrScanned(data) {
-  if (data.uin === qrUin.value) {
-    qrStatus.value = 'scanned'
-    setTimeout(() => { showQrDialog.value = false; fetchAccounts() }, 1500)
-  }
-}
-function onQrExpired(data) {
-  if (data.uin === qrUin.value) { qrStatus.value = 'error'; ElMessage.warning(data.reason || '二维码已过期') }
-}
 
 onMounted(() => {
   fetchAccounts()
   onEvent('bot:statusChange', onStatusChange)
-  onEvent('qr:scanned', onQrScanned)
-  onEvent('qr:expired', onQrExpired)
 })
 onUnmounted(() => {
   offEvent('bot:statusChange', onStatusChange)
-  offEvent('qr:scanned', onQrScanned)
-  offEvent('qr:expired', onQrExpired)
 })
 </script>
 
