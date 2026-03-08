@@ -110,8 +110,8 @@ const registrationEnabled = ref(true)
 
 async function fetchRegistration() {
   try {
-    const { data } = await api.get('/admin/registration-enabled')
-    if (data?.ok) registrationEnabled.value = data.data.enabled
+    const res = await api.get('/admin/registration-enabled')
+    if (res?.ok) registrationEnabled.value = !!res.data?.enabled
   } catch { /* */ }
 }
 

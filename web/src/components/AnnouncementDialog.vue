@@ -43,7 +43,7 @@
     <template #footer>
       <div class="dialog-footer">
         <template v-if="!editing">
-          <el-button v-if="isAdmin" type="primary" plain size="small" @click="startEdit">
+          <el-button v-if="isAdmin" type="primary" @click="startEdit">
             <el-icon><Edit /></el-icon> 编辑公告
           </el-button>
           <el-button @click="visible = false">关闭</el-button>

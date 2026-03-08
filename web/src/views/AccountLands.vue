@@ -32,7 +32,26 @@
 
     <!-- 刷新按钮 -->
     <div class="toolbar" v-if="landData">
-      <el-button size="small" :icon="Refresh" @click="fetchLands" :loading="loading">刷新</el-button>
+      <div class="toolbar-left">
+        <el-button size="small" :icon="Refresh" @click="fetchLands" :loading="loading || !!operating">刷新</el-button>
+      </div>
+      <div class="toolbar-actions">
+        <el-button size="small" type="success" :loading="operating === 'harvest'" :disabled="!!operating" @click="handleOperate('harvest')">
+          收获
+        </el-button>
+        <el-button size="small" type="warning" :loading="operating === 'clear'" :disabled="!!operating" @click="handleOperate('clear')">
+          打理
+        </el-button>
+        <el-button size="small" type="primary" :loading="operating === 'plant'" :disabled="!!operating" @click="handleOperate('plant')">
+          种植
+        </el-button>
+        <el-button size="small" type="info" :loading="operating === 'upgrade'" :disabled="!!operating" @click="handleOperate('upgrade')">
+          升级
+        </el-button>
+        <el-button size="small" type="danger" :loading="operating === 'removeDead'" :disabled="!!operating" @click="handleOperate('removeDead')">
+          铲除
+        </el-button>
+      </div>
     </div>
 
     <!-- 土地卡片网格 -->
@@ -66,6 +85,9 @@
               <div class="plant-text-info">
                 <div class="land-plant-name">{{ land.plantName || '-' }}</div>
                 <div class="land-phase">{{ land.phaseName || '' }}</div>
+                <div class="land-soil-type-text" v-if="getSoilName(land.soilType)">
+                  类别：{{ getSoilName(land.soilType) }}
+                </div>
               </div>
             </div>
 
@@ -74,8 +96,8 @@
                 <span>成长进度</span>
                 <span class="progress-percent" v-if="land.progress">{{ land.progress }}%</span>
               </div>
-              <el-progress 
-                :percentage="parseFloat(land.progress || 0)" 
+              <el-progress
+                :percentage="parseFloat(land.progress || 0)"
                 :status="land.status === 'harvestable' ? 'success' : ''"
                 :stroke-width="8"
                 :show-text="false"
@@ -121,13 +143,15 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getAccountLands } from '../api/index.js'
+import { getAccountLands, operateAccountFarm } from '../api/index.js'
 
 const props = defineProps({ uin: String })
 
 const loading = ref(false)
 const landData = ref(null)
+const operating = ref('')
 
 async function fetchLands() {
   loading.value = true
@@ -160,13 +184,53 @@ function getStatusText(land) {
 }
 
 function getSoilName(type) {
-  const map = { 1: '普通', 2: '红土地', 3: '黑土地', 4: '金土地', 5: '翡翠', 6: '蓝宝石' }
+  const map = {
+    0: '普通土地',
+    1: '红土地',
+    2: '黑土地',
+    3: '金土地',
+    4: '紫土地',
+    5: '翡翠土地',
+    6: '蓝宝石土地',
+  }
   return map[type] || ''
 }
 
 function getSoilColor(type) {
-  const map = { 1: 'info', 2: 'danger', 3: 'warning', 4: 'warning', 5: 'success', 6: 'primary' }
+  const map = { 0: 'info', 1: 'danger', 2: 'warning', 3: 'warning', 4: 'primary', 5: 'success', 6: 'primary' }
   return map[type] || 'info'
+}
+
+async function handleOperate(opType) {
+  const confirmMap = {
+    harvest: '确定要收获全部成熟作物吗？',
+    clear: '确定要一键浇水/除草/除虫吗？',
+    plant: '确定要一键种植空地吗？',
+    upgrade: '确定要升级全部可升级土地吗？（会消耗金币）',
+    removeDead: '确定只铲除枯萎作物吗？',
+    all: '确定执行一键全收吗？（收获、浇水、除草/除虫、种植）',
+  }
+
+  try {
+    await ElMessageBox.confirm(confirmMap[opType] || '确定执行此操作吗？', '确认操作', {
+      type: 'warning',
+      confirmButtonText: '执行',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+
+  operating.value = opType
+  try {
+    const res = await operateAccountFarm(props.uin, opType)
+    ElMessage.success(res.data?.message || '操作完成')
+    await fetchLands()
+  } catch (err) {
+    ElMessage.error(err.message || '操作失败')
+  } finally {
+    operating.value = ''
+  }
 }
 
 onMounted(fetchLands)
@@ -228,6 +292,18 @@ onMounted(fetchLands)
 
 .toolbar {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .land-grid {
@@ -256,9 +332,10 @@ onMounted(fetchLands)
 }
 
 /* 土地颜色增强 */
-.land-card.soil-2 { border-left: 6px solid #f56c6c; } /* 红 */
-.land-card.soil-3 { border-left: 6px solid #333333; } /* 黑 */
-.land-card.soil-4 { border-left: 6px solid #e6a23c; } /* 金 */
+.land-card.soil-1 { border-left: 6px solid #f56c6c; } /* 红 */
+.land-card.soil-2 { border-left: 6px solid #333333; } /* 黑 */
+.land-card.soil-3 { border-left: 6px solid #e6a23c; } /* 金 */
+.land-card.soil-4 { border-left: 6px solid #a855f7; } /* 紫 */
 .land-card.soil-5 { border-left: 6px solid #67c23a; } /* 翡 */
 .land-card.soil-6 { border-left: 6px solid #409eff; } /* 蓝 */
 
@@ -354,6 +431,12 @@ onMounted(fetchLands)
 .land-phase {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.land-soil-type-text {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 2px;
 }
 
 .land-progress-box {

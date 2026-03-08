@@ -18,8 +18,8 @@
         </div>
       </div>
 
-      <!-- 登录/注册切换（仅在非首次初始化且允许注册时展示） -->
-      <div v-if="!isFirstSetup && registrationEnabled" class="tab-switch">
+      <!-- 登录/注册切换（仅在配置加载完成且允许注册时展示） -->
+      <div v-if="showRegisterTab" class="tab-switch">
         <div class="tab-item" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</div>
         <div class="tab-item" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</div>
       </div>
@@ -114,12 +114,14 @@ const auth = useAuthStore()
 const loading = ref(false)
 const mode = ref('login')
 const isFirstSetup = ref(false)
-const registrationEnabled = ref(true)
+const registrationEnabled = ref(false)
+const setupLoaded = ref(false)
 const form = ref({ username: '', password: '' })
 const regForm = ref({ username: '', password: '', confirmPassword: '' })
+const showRegisterTab = computed(() => setupLoaded.value && !isFirstSetup.value && registrationEnabled.value)
 const showRegisterForm = computed(() => {
   if (isFirstSetup.value) return true
-  return registrationEnabled.value && mode.value === 'register'
+  return showRegisterTab.value && mode.value === 'register'
 })
 
 // 已登录直接跳转
@@ -128,15 +130,18 @@ if (auth.isLoggedIn) router.replace('/dashboard')
 // 检查系统是否为首次初始化
 onMounted(async () => {
   try {
-    const { data } = await api.get('/system/setup-status')
-    isFirstSetup.value = !!data?.data?.isFirstSetup
-    registrationEnabled.value = data?.data?.registrationEnabled !== false
+    const res = await api.get('/system/setup-status')
+    isFirstSetup.value = !!res?.data?.isFirstSetup
+    registrationEnabled.value = !!res?.data?.registrationEnabled
     if (isFirstSetup.value) {
       mode.value = 'register'
     } else {
       mode.value = 'login'
     }
   } catch { /* 忽略网络异常，默认登录模式 */ }
+  finally {
+    setupLoaded.value = true
+  }
 })
 
 async function handleLogin() {
@@ -156,6 +161,9 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
+  if (!isFirstSetup.value && !registrationEnabled.value) {
+    return ElMessage.warning('管理员已关闭注册')
+  }
   if (!regForm.value.username || !regForm.value.password) {
     return ElMessage.warning('请输入用户名和密码')
   }

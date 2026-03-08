@@ -299,6 +299,22 @@ router.get('/accounts/:uin/lands', canAccessUin, async (req, res) => {
     }
 });
 
+/** POST /api/accounts/:uin/farm-operate - 手动执行农场操作 */
+router.post('/accounts/:uin/farm-operate', canAccessUin, async (req, res) => {
+    try {
+        const bot = botManager.bots.get(req.params.uin);
+        if (!bot || bot.status !== 'running') {
+            return res.status(400).json({ ok: false, error: 'Bot 未运行' });
+        }
+
+        const { opType } = req.body || {};
+        const result = await bot.manualFarmOperate(opType || 'all');
+        res.json({ ok: true, data: result });
+    } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
 /** GET /api/accounts/:uin/friends - 获取好友列表 */
 router.get('/accounts/:uin/friends', canAccessUin, async (req, res) => {
     try {

@@ -17,6 +17,7 @@ web/dist/
 
 # 日志
 logs/
+tmp/
 *.log
 !CHANGE.log
 

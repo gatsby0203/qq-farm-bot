@@ -12,7 +12,7 @@ const EventEmitter = require('events');
 const WebSocket = require('ws');
 const { types } = require('../src/proto');
 const { CONFIG } = require('../src/config');
-const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById } = require('../src/gameConfig');
+const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById, getPlantExp } = require('../src/gameConfig');
 const cryptoWasm = require('./utils/crypto-wasm');
 const fs = require('fs');
 const path = require('path');
@@ -673,15 +673,69 @@ class BotInstance extends EventEmitter {
         return bestItem.itemId;
     }
 
+    _applyHarvestRewards(items = []) {
+        if (!items || items.length === 0) return;
+        for (const it of items) {
+            const id = toNum(it.id);
+            if (id === 1 || id === 1001) this.userState.gold += toNum(it.count);
+            else if (id === 2 || id === 1101) this.userState.exp += toNum(it.count);
+        }
+    }
+
+    async _harvestLands(landIds, { manual = false } = {}) {
+        if (!landIds || landIds.length === 0) return 0;
+        const reply = await this.harvest(landIds);
+        this.log('收获', manual ? `🌾 手动收获完成 (${landIds.length}块地)` : `🌾 收获成功 (${landIds.length}块地)`);
+        this._checkDailyReset();
+        this.dailyStats.harvestCount += landIds.length;
+        this.emit('statsUpdate', { userId: this.userId, dailyStats: this.dailyStats });
+        this._applyHarvestRewards(reply?.items || []);
+        return landIds.length;
+    }
+
+    async _collectPlantTargets(analysis, { manual = false } = {}) {
+        const toPlant = [...(analysis.empty || [])];
+        let removedDead = 0;
+
+        if (analysis.dead && analysis.dead.length > 0) {
+            const deadIds = [...analysis.dead];
+            await this.removePlant(deadIds);
+            removedDead = deadIds.length;
+            toPlant.push(...deadIds);
+            this.log('铲除', manual ? `🪓 手动铲除枯萎作物 (${removedDead}块地)` : `铲除枯萎作物 (${removedDead}块地)`);
+        }
+
+        return { toPlant, removedDead };
+    }
+
+    async _plantByBestSeed(landIds, unlockedCount, { manual = false } = {}) {
+        let planted = 0;
+        const queue = [...landIds];
+        while (queue.length > 0) {
+            let bestSeed;
+            try {
+                bestSeed = await this.findBestSeed(unlockedCount);
+            } catch (err) {
+                this.logWarn('种植', manual ? `手动种植中断: ${err.message}` : err.message);
+                break;
+            }
+
+            const batch = queue.splice(0, Math.max(1, toNum(bestSeed.count)));
+            if (batch.length === 0) break;
+            await this.plantSeed(batch, bestSeed.id);
+            planted += batch.length;
+        }
+        return planted;
+    }
+
     async checkFarm() {
         if (this.isCheckingFarm) return;
         this.isCheckingFarm = true;
-                    try {
+        try {
             const landsReply = await this.getAllLands();
             const lands = landsReply.lands || [];
             if (lands.length === 0) return;
 
-            // ...这里缓存数据，并且通过Mixins处理：
             this._cachedLands = lands;
             this._cachedLandsTime = Date.now();
 
@@ -690,37 +744,15 @@ class BotInstance extends EventEmitter {
 
             if (analysis.harvestable.length > 0 && this.featureToggles.autoHarvest) {
                 try {
-                    const res = await this.harvest(analysis.harvestable);
-                    this.log('收获', `🌾 收获成功 (${analysis.harvestable.length}块地)`);
-                    this._checkDailyReset();
-                    this.dailyStats.harvestCount += analysis.harvestable.length;
-
-                    if (res && res.items && res.items.length > 0) {
-                        for (const it of res.items) {
-                            const id = toNum(it.id);
-                            if (id === 1 || id === 1001) this.userState.gold += toNum(it.count);
-                            else if (id === 2 || id === 1101) this.userState.exp += toNum(it.count);
-                        }
-                    }
+                    await this._harvestLands(analysis.harvestable, { manual: false });
                     this._emitStateUpdate();
                 } catch (e) { this.logWarn('收获', e.message); }
             }
 
-            if (analysis.dead.length > 0) {
-                await this.removePlant(analysis.dead);
-                this.log('铲除', `铲除枯萎作物 (${analysis.dead.length}块地)`);
-                analysis.empty.push(...analysis.dead);
-        }
-
-            if (analysis.empty.length > 0 && this.featureToggles.autoPlant) {
+            const { toPlant } = await this._collectPlantTargets(analysis, { manual: false });
+            if (toPlant.length > 0 && this.featureToggles.autoPlant) {
                 try {
-                    const toPlant = [...analysis.empty];
-                    while (toPlant.length > 0) {
-                        let bestSeed;
-                        try { bestSeed = await this.findBestSeed(unlockedCount); } catch (e) { break; }
-                        const batch = toPlant.splice(0, bestSeed.count);
-                        await this.plantSeed(batch, bestSeed.id);
-                    }
+                    await this._plantByBestSeed(toPlant, unlockedCount, { manual: false });
                 } catch (e) { this.logWarn('种植', e.message); }
             }
 
@@ -746,7 +778,6 @@ class BotInstance extends EventEmitter {
             if (this.featureToggles.autoLandUpgrade) {
                 await this.checkLandUpgrades(lands);
             }
-
         } catch (err) {
             this.logWarn('农场', `检查农场失败: ${err.message}`);
         } finally {
@@ -774,8 +805,8 @@ class BotInstance extends EventEmitter {
         }
     }
 
-    async checkLandUpgrades(lands) {
-        const targetType = Number(this.featureToggles.landUpgradeTarget) || 6;
+    async checkLandUpgrades(lands, opts = {}) {
+        const targetType = Number(opts.targetType ?? this.featureToggles.landUpgradeTarget) || 6;
         if (targetType <= 0) return;
 
         const upgradeableLands = lands.filter(l => {
@@ -783,16 +814,140 @@ class BotInstance extends EventEmitter {
             const t = toNum(l.soil_type) || 0;
             return t < targetType;
         });
-        if (upgradeableLands.length === 0) return;
+        if (upgradeableLands.length === 0) return 0;
 
         upgradeableLands.sort((a, b) => toNum(a.id) - toNum(b.id));
+        let upgradedCount = 0;
 
         for (const land of upgradeableLands) {
-        try {
+            try {
                 await this.upgradeLand(toNum(land.id));
+                upgradedCount++;
                 const newType = (toNum(land.soil_type) || 0) + 1;
-                this.log('升级', `🌟 成功升级土地 (ID: ${toNum(land.id)}) 到 等级 ${newType}!`);
-            } catch (e) { break; }
+                if (!opts.compactLog) {
+                    this.log('升级', `🌟 成功升级土地 (ID: ${toNum(land.id)}) 到 等级 ${newType}!`);
+                }
+            } catch (e) {
+                if (opts.manual) this.logWarn('升级', `手动升级中断: ${e.message}`);
+                break;
+            }
+        }
+        return upgradedCount;
+    }
+
+    /**
+     * 手动执行农场操作（用于前端一键按钮）
+     * @param {'harvest'|'clear'|'plant'|'upgrade'|'removeDead'|'all'} opType
+     */
+    async manualFarmOperate(opType = 'all') {
+        const allowedOps = new Set(['harvest', 'clear', 'plant', 'upgrade', 'removeDead', 'all']);
+        if (!allowedOps.has(opType)) {
+            throw new Error('不支持的操作类型');
+        }
+        if (this.status !== 'running') {
+            throw new Error('Bot 未运行');
+        }
+        if (this.isCheckingFarm) {
+            throw new Error('农场操作进行中，请稍后重试');
+        }
+
+        const result = {
+            opType,
+            harvested: 0,
+            clearedWeed: 0,
+            clearedBug: 0,
+            watered: 0,
+            removedDead: 0,
+            planted: 0,
+            upgraded: 0,
+            message: '',
+        };
+
+        this.isCheckingFarm = true;
+        try {
+            let landsReply = await this.getAllLands();
+            let lands = landsReply.lands || [];
+            if (lands.length === 0) {
+                result.message = '暂无土地数据';
+                return result;
+            }
+
+            let analysis = this.analyzeLands(lands);
+            const unlockedCount = lands.filter(l => l && l.unlocked).length;
+            const doHarvest = opType === 'harvest' || opType === 'all';
+            const doClear = opType === 'clear' || opType === 'all';
+            const doPlant = opType === 'plant' || opType === 'all';
+            const doUpgrade = opType === 'upgrade';
+            const doRemoveDead = opType === 'removeDead';
+
+            if (doHarvest && analysis.harvestable.length > 0) {
+                result.harvested = await this._harvestLands(analysis.harvestable, { manual: true });
+            }
+
+            if (doClear && analysis.needWeed.length > 0) {
+                const weedIds = [...analysis.needWeed];
+                await this.weedOut(weedIds);
+                result.clearedWeed = weedIds.length;
+                this.log('除草', `🌿 手动除草完成 (${result.clearedWeed}块地)`);
+            }
+
+            if (doClear && analysis.needBug.length > 0) {
+                const bugIds = [...analysis.needBug];
+                await this.insecticide(bugIds);
+                result.clearedBug = bugIds.length;
+                this.log('除虫', `🐛 手动除虫完成 (${result.clearedBug}块地)`);
+            }
+
+            if (doClear && analysis.needWater.length > 0) {
+                const waterIds = [...analysis.needWater];
+                await this.waterLand(waterIds);
+                result.watered = waterIds.length;
+                this.log('浇水', `💦 手动浇水完成 (${result.watered}块地)`);
+            }
+
+            if (doRemoveDead && analysis.dead.length > 0) {
+                const { removedDead } = await this._collectPlantTargets({
+                    ...analysis,
+                    empty: [],
+                }, { manual: true });
+                result.removedDead = removedDead;
+            }
+
+            if (doPlant) {
+                // 重新获取一次地块状态，确保收获/清理后的状态准确
+                landsReply = await this.getAllLands();
+                lands = landsReply.lands || [];
+                analysis = this.analyzeLands(lands);
+
+                const { toPlant, removedDead } = await this._collectPlantTargets(analysis, { manual: true });
+                result.removedDead = removedDead;
+                result.planted = await this._plantByBestSeed(toPlant, unlockedCount, { manual: true });
+            }
+
+            if (doUpgrade) {
+                landsReply = await this.getAllLands();
+                lands = landsReply.lands || [];
+                result.upgraded = await this.checkLandUpgrades(lands, { targetType: 6, manual: true, compactLog: true });
+                if (result.upgraded > 0) {
+                    this.log('升级', `🌟 手动升级土地完成 (${result.upgraded}块地)`);
+                }
+            }
+
+            this._emitStateUpdate();
+
+            const summary = [];
+            if (result.harvested) summary.push(`收获 ${result.harvested} 块`);
+            if (result.clearedWeed) summary.push(`除草 ${result.clearedWeed} 块`);
+            if (result.clearedBug) summary.push(`除虫 ${result.clearedBug} 块`);
+            if (result.watered) summary.push(`浇水 ${result.watered} 块`);
+            if (result.removedDead) summary.push(`铲除枯萎 ${result.removedDead} 块`);
+            if (result.planted) summary.push(`种植 ${result.planted} 块`);
+            if (result.upgraded) summary.push(`升级 ${result.upgraded} 块`);
+
+            result.message = summary.length > 0 ? `操作完成：${summary.join('，')}` : '未发现可执行项目';
+            return result;
+        } finally {
+            this.isCheckingFarm = false;
         }
     }
 
