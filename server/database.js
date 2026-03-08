@@ -303,7 +303,7 @@ function addStatistic(uin, action, amount, target = '', gold = 0) {
 
 function getHourlyStatistics(uin, hoursLimit = 24) {
     const rawStats = queryAll(
-        `SELECT 
+        `SELECT
             strftime('%Y-%m-%d %H:00:00', created_at) as hour,
             action,
             target,
@@ -381,7 +381,7 @@ function getDailyStatistics(uin, daysLimit = 7) {
     const startDateStr = `${year}-${month}-${day}`;
 
     const rawStats = queryAll(
-        `SELECT 
+        `SELECT
             date(created_at) as day,
             action,
             SUM(amount) as total_amount,
@@ -654,12 +654,16 @@ function getStealRankingByUin(uin, hours) {
 
 /** 确保存在默认管理员 (首次运行时) */
 function ensureDefaultAdmin() {
-    const admin = getAdminUser('admin');
-    if (!admin) {
-        // 默认密码: admin123 (sha256)
-        const hash = crypto.createHash('sha256').update('admin123').digest('hex');
-        createAdminUser({ username: 'admin', passwordHash: hash, role: 'admin' });
-        console.log('[DB] 已创建默认管理员 admin / admin123');
+    const defaultUser = process.env.ADMIN_USER;
+    const defaultPass = process.env.ADMIN_PASS;
+
+    if (defaultUser && defaultPass) {
+        const admin = getAdminUser(defaultUser);
+        if (!admin) {
+            const hash = crypto.createHash('sha256').update(defaultPass).digest('hex');
+            createAdminUser({ username: defaultUser, passwordHash: hash, role: 'admin' });
+            console.log(`[DB] 环境变量已侦测，已创建初始管理员账户: ${defaultUser}`);
+        }
     }
 }
 

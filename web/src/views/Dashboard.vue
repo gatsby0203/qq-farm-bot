@@ -3,7 +3,7 @@
     <!-- 欢迎与项目 Logo -->
     <div class="dashboard-welcome">
       <div class="welcome-logo-box">
-        <img :src="'/assets/docs/Main.png'" class="welcome-logo" alt="Main Logo" />
+        <img :src="'/main.svg'" class="welcome-logo" alt="Main Logo" />
       </div>
       <div class="welcome-text">
         <h2 class="welcome-title">农场管家 Dashboard</h2>
@@ -310,7 +310,7 @@ onUnmounted(() => {
   width: 64px;
   height: 64px;
   background: rgba(255, 255, 255, 0.05);
-  padding: 8px;
+  padding: 10px;
   border-radius: 12px;
   flex-shrink: 0;
 }
@@ -318,8 +318,8 @@ onUnmounted(() => {
 .welcome-logo {
   width: 100%;
   height: 100%;
+  padding: 1px;
   object-fit: contain;
-  border-radius: 8px; /* 增加圆角 */
 }
 
 .welcome-title {

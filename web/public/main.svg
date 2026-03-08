@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a6e32d"/>
+      <stop offset="100%" stop-color="#7abd1e"/>
+    </linearGradient>
+
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#d0fa46"/>
+      <stop offset="30%" stop-color="#8cd415"/>
+      <stop offset="100%" stop-color="#4aa102"/>
+    </linearGradient>
+
+    <linearGradient id="highlightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="soilGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4c7300"/>
+      <stop offset="100%" stop-color="#2a4500"/>
+    </linearGradient>
+
+    <linearGradient id="dewGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#a6e32d" stop-opacity="0.6"/>
+    </linearGradient>
+
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#3d6105" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="45" fill="url(#bgGrad)" />
+
+  <g stroke="#ffda2b" stroke-width="8" stroke-linecap="round" filter="url(#dropShadow)">
+    <line x1="105" y1="45" x2="118" y2="60" />
+    <line x1="145" y1="30" x2="152" y2="52" />
+    <line x1="185" y1="38" x2="178" y2="58" />
+    <line x1="220" y1="65" x2="198" y2="75" />
+    <line x1="240" y1="108" x2="215" y2="102" />
+    <line x1="235" y1="150" x2="215" y2="135" />
+  </g>
+
+  <path d="M 75 210 C 95 195, 160 195, 185 210 C 195 225, 160 230, 130 230 C 100 230, 65 225, 75 210 Z" fill="url(#soilGrad)" filter="url(#dropShadow)"/>
+
+  <g stroke="#264d00" stroke-width="10" stroke-linejoin="round" stroke-linecap="round" fill="url(#leafGrad)" filter="url(#dropShadow)">
+
+    <path d="M 115 145 C 115 180, 118 200, 125 215 C 132 222, 148 222, 150 215 C 152 185, 142 160, 130 135 Z" />
+
+    <path d="M 120 140 C 120 75, 165 45, 205 65 C 215 115, 165 155, 120 140 Z" />
+
+    <path d="M 115 145 C 80 100, 25 110, 20 150 C 35 195, 90 175, 115 145 Z" />
+
+  </g>
+
+  <g fill="none" stroke="#264d00" stroke-width="4" stroke-linecap="round">
+    <path d="M 120 140 Q 155 105, 190 75" />
+    <path d="M 115 145 Q 75 135, 35 145" />
+  </g>
+
+  <path d="M 126 130 C 126 82, 163 56, 195 72 C 175 60, 138 80, 138 125 Z" fill="url(#highlightGrad)" />
+  <path d="M 110 138 C 82 105, 38 113, 33 145 C 45 125, 80 120, 100 140 Z" fill="url(#highlightGrad)" />
+  <path d="M 122 155 C 122 180, 124 200, 129 210 C 126 195, 125 175, 127 155 Z" fill="url(#highlightGrad)" />
+
+  <g transform="translate(45, 80)">
+    <circle cx="0" cy="0" r="10" fill="url(#dewGrad)" stroke="#6fb314" stroke-width="2"/>
+    <circle cx="-3" cy="-3" r="3" fill="#ffffff" />
+  </g>
+
+  <g transform="translate(50, 185)">
+    <circle cx="0" cy="0" r="8" fill="url(#dewGrad)" stroke="#6fb314" stroke-width="2"/>
+    <circle cx="-2" cy="-2" r="2" fill="#ffffff" />
+  </g>
+
+  <g transform="translate(190, 155)">
+    <path d="M 0 -12 C 10 5, 10 12, 0 12 C -10 12, -10 5, 0 -12 Z" fill="url(#dewGrad)" stroke="#6fb314" stroke-width="2"/>
+    <circle cx="-3" cy="2" r="2.5" fill="#ffffff" />
+  </g>
+
+  <g transform="translate(205, 125)">
+    <circle cx="0" cy="0" r="6" fill="url(#dewGrad)" stroke="#6fb314" stroke-width="1.5"/>
+    <circle cx="-2" cy="-2" r="1.5" fill="#ffffff" />
+  </g>
+
+</svg>

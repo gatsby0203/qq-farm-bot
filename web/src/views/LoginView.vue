@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="login-logo-wrapper">
-          <img :src="'/assets/docs/Main.png'" class="login-logo" alt="Logo" />
+          <img :src="'/main.svg'" class="login-logo" alt="Logo" />
         </div>
         <h1>QQ 农场助手</h1>
         <p class="login-subtitle">多账号自动化管理平台(admin)</p>
@@ -185,20 +185,20 @@ async function handleRegister() {
 }
 
 .login-logo-wrapper {
-  width: 90px;
-  height: 90px;
+  width: 92px;
+  height: 92px;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
-  border-radius: 20px;
+  padding: 10px;
+  border-radius: 18px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 .login-logo {
   width: 100%;
   height: 100%;
+  padding: 2px;
   object-fit: contain;
-  border-radius: 12px; /* 增加圆角 */
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 

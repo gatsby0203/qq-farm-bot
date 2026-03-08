@@ -4,7 +4,7 @@
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-logo">
         <div class="logo-img-wrapper" :class="{ small: sidebarCollapsed }">
-          <img :src="'/assets/docs/Main.png'" class="logo-img" alt="Logo" />
+          <img :src="'/main.svg'" class="logo-img" alt="Logo" />
         </div>
         <span v-if="!sidebarCollapsed" class="logo-text">QQ农场助手</span>
       </div>
@@ -182,7 +182,7 @@
     <aside class="mobile-sidebar" :class="{ open: mobileMenuOpen }">
       <div class="sidebar-logo">
         <div class="logo-img-wrapper">
-          <img :src="'/assets/docs/Main.png'" class="logo-img" alt="Logo" />
+          <img :src="'/main.svg'" class="logo-img" alt="Logo" />
         </div>
         <span class="logo-text">QQ农场助手</span>
       </div>
@@ -370,28 +370,30 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--sidebar-border);
   height: 64px;
 }
 
 .logo-img-wrapper {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 10px;
   flex-shrink: 0;
   transition: all 0.2s;
 }
 
 .logo-img-wrapper.small {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
+  padding: 2px;
 }
 
 .logo-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 8px; /* 增加圆角 */
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 

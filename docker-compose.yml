@@ -1,22 +1,23 @@
 services:
   qq-farm-bot:
-    # 直接拉取线上镜像，实现秒级启动
-    # 【注意】请将下面的 sulimu 替换为您实际的 DockerHub 用户名
-    image: sulimu/qq-farm-bot:latest
+    # 基于仓库根目录 Dockerfile 本地构建镜像
+    build: .
     container_name: qq-farm-bot
     restart: unless-stopped
     ports:
-      - "3000:3000" 
+      # 端口映射：宿主机端口:容器端口
+      - "3000:3000"
     volumes:
-      # 持久化数据库，防止容器重建后数据丢失 
-      - ./data:/app/data 
+      # 持久化运行数据（SQLite 数据库与运行状态）
+      - ./data:/app/data
     environment:
-      - PORT=3000 
+      # 应用运行时参数
+      - PORT=3000
       - TZ=Asia/Shanghai
-      # 生产环境请修改为你自己的加密密钥（32字符）
+      # 安全项：生产环境请替换为自定义 32 字符密钥
       - BOT_ENCRYPT_KEY=qq-farm-bot-default-key-32bytes!
-      # 邮件掉线通知 SMTP 配置（如需启用，取消以下注释并填写真实信息）
+      # 可选 SMTP 配置（启用邮件通知时，取消注释并填写真实值）
       # - MAIL_HOST=smtp.qq.com
       # - MAIL_PORT=587
-      # - MAIL_USER=your-email@qq.com
-      # - MAIL_PASS=your-smtp-auth-code
+      # - MAIL_USER=你的邮箱@qq.com
+      # - MAIL_PASS=你的SMTP授权码

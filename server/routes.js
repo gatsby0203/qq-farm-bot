@@ -43,6 +43,16 @@ router.post('/auth/login', (req, res) => {
     }
 });
 
+/** GET /api/system/setup-status */
+router.get('/system/setup-status', (req, res) => {
+    try {
+        const adminCount = db.getAllAdminUsers().length;
+        res.json({ ok: true, data: { isFirstSetup: adminCount === 0 } });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 /** POST /api/auth/register */
 router.post('/auth/register', (req, res) => {
     try {
@@ -52,7 +62,11 @@ router.post('/auth/register', (req, res) => {
         if (password.length < 4) return res.status(400).json({ ok: false, error: '密码至少4位' });
         if (db.getAdminUser(username)) return res.status(400).json({ ok: false, error: '用户名已存在' });
 
-        db.createAdminUser({ username, passwordHash: hashPassword(password), role: 'user' });
+        // 如果目前系统里没有任何管理员，第一个注册的直接为 admin
+        const isFirstUser = db.getAllAdminUsers().length === 0;
+        const assignedRole = isFirstUser ? 'admin' : 'user';
+
+        db.createAdminUser({ username, passwordHash: hashPassword(password), role: assignedRole });
         const user = db.getAdminUser(username);
         const token = signToken({
             id: user.id,
