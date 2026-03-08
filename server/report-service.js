@@ -78,21 +78,55 @@ async function safeRun(type) {
 // ============ 核心逻辑 ============
 
 async function generateAndSendReport(type, force = false) {
-    const settings = db.getReportSettings();
-    if (!force) {
-        if (type === 'hourly' && !settings.hourlyEnabled) return;
-        if (type === 'daily' && !settings.dailyEnabled) return;
-    }
-
-    if (!settings.pushEmailEnabled && !settings.serverChanEnabled) {
-        console.log(`[汇报] 邮件和方糖推送均未启用，跳过 ${type} 汇报`);
+    const enabledUsers = db.getAllReportEnabledUsers();
+    if (enabledUsers.length === 0 && !force) {
+        console.log(`[汇报] 无任何用户启用 ${type} 汇报，跳过`);
         return;
     }
+
+    for (const userSettings of enabledUsers) {
+        if (!force) {
+            if (type === 'hourly' && !userSettings.reportHourlyEnabled) continue;
+            if (type === 'daily' && !userSettings.reportDailyEnabled) continue;
+        }
+        try {
+            await generateAndSendReportForUser(type, userSettings.adminUserId, force);
+        } catch (err) {
+            console.error(`[汇报] 用户 ${userSettings.adminUserId} ${type} 汇报发送失败:`, err.message);
+        }
+    }
+}
+
+/**
+ * 为单个用户生成并发送汇报
+ * @param {string} type - 'hourly' | 'daily'
+ * @param {number} adminUserId - 管理用户 ID
+ * @param {boolean} force - 是否强制发送
+ */
+async function generateAndSendReportForUser(type, adminUserId, force = false) {
+    const userSettings = db.getUserNotificationSettings(adminUserId);
+    if (!force) {
+        if (type === 'hourly' && !userSettings.reportHourlyEnabled) return;
+        if (type === 'daily' && !userSettings.reportDailyEnabled) return;
+    }
+    if (!userSettings.reportPushEmail && !userSettings.reportPushSc && !force) {
+        return;
+    }
+
+    // 确定该用户能看到的账号
+    const adminUser = db.getAdminUserById(adminUserId);
+    let allowedUins = null; // null = 全部
+    if (adminUser && adminUser.role !== 'admin') {
+        allowedUins = (adminUser.allowed_uins || '').split(',').map(s => s.trim()).filter(Boolean);
+    }
+    const selectedUins = userSettings.reportUins
+        ? userSettings.reportUins.split(',').filter(Boolean)
+        : null; // null = 全部允许的
 
     const hours = type === 'daily' ? 24 : 1;
     const now = new Date();
     const from = new Date(now.getTime() - hours * 3600 * 1000);
-    const reportData = collectReportData(hours);
+    const reportData = collectReportData(hours, allowedUins, selectedUins);
     const html = buildReportHTML(type, reportData, from, now);
     const md = buildReportMarkdown(type, reportData, from, now);
     const typeLabel = type === 'daily' ? '每日' : '每小时';
@@ -100,21 +134,25 @@ async function generateAndSendReport(type, force = false) {
     const subject = `📊 QQ农场 ${typeLabel}汇报 - ${timeStr}`;
 
     await pushNotification(subject, md, html, {
-        useEmail: settings.pushEmailEnabled,
-        useSc: settings.serverChanEnabled
+        mailTo: userSettings.mailTo,
+        useEmail: userSettings.reportPushEmail || force,
+        scType: userSettings.scType,
+        scKey: userSettings.scKey,
+        useSc: userSettings.reportPushSc || force,
     });
 }
 
-/**
- * 按账号采集汇报数据
- */
-function collectReportData(hours) {
+function collectReportData(hours, allowedUins = null, selectedUins = null) {
     const accountsData = [];
 
     if (botManagerRef) {
         const list = botManagerRef.listAccounts();
         for (const acc of list) {
-            const uin = acc.uin || acc.userId;
+            const uin = String(acc.uin || acc.userId);
+            // 过滤: 只包含用户允许的和已选择的账号
+            if (allowedUins && !allowedUins.includes(uin)) continue;
+            if (selectedUins && !selectedUins.includes(uin)) continue;
+
             const stats = db.getReportStatisticsByUin(uin, hours);
             const stealRanking = db.getStealRankingByUin(uin, hours);
             accountsData.push({
@@ -130,7 +168,7 @@ function collectReportData(hours) {
         }
     }
 
-    // 全局汇总
+    // 汇报范围内的汇总
     const globalStats = db.getReportStatistics(hours);
     const globalStealRanking = db.getStealRanking(hours);
 
@@ -450,4 +488,4 @@ function esc(str) {
 // ============ 通知 ============
 // 发送逻辑已提取到 notification-service.js 中兼容
 
-module.exports = { startScheduler, stopScheduler, generateAndSendReport };
+module.exports = { startScheduler, stopScheduler, generateAndSendReport, generateAndSendReportForUser };

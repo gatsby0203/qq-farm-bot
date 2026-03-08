@@ -26,13 +26,13 @@
   :label="acc.nickname || acc.displayUin || acc.uin"
 >
   <div style="display:flex;align-items:center;gap:8px;">
-    <img 
-      :src="acc.avatar || `https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=40`" 
-      style="width:22px;height:22px;border-radius:50%;" 
+    <img
+      :src="acc.avatar || `https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=40`"
+      style="width:22px;height:22px;border-radius:50%;"
     />
-    
+
     <span>{{ acc.nickname || acc.displayUin || acc.uin }}</span>
-    
+
     <span style="margin-left:auto;">
       {{ acc.status === 'running' ? '🟢' : '⚪' }}
     </span>
@@ -111,6 +111,17 @@
             <span v-if="!sidebarCollapsed">用户管理</span>
           </div>
         </template>
+
+        <div class="nav-divider" v-if="!sidebarCollapsed">设置</div>
+        <div
+          class="nav-item"
+          :class="{ active: route.name === 'NotificationSettings' }"
+          @click="router.push('/notifications')"
+          title="推送设置"
+        >
+          <el-icon :size="22"><Bell /></el-icon>
+          <span v-if="!sidebarCollapsed">推送设置</span>
+        </div>
       </nav>
 
       <!-- 底部 -->
@@ -217,6 +228,10 @@
             <el-icon :size="22"><UserFilled /></el-icon><span>用户管理</span>
           </div>
         </template>
+        <div class="nav-divider">设置</div>
+        <div class="nav-item" :class="{ active: route.name === 'NotificationSettings' }" @click="goMobile('/notifications')">
+          <el-icon :size="22"><Bell /></el-icon><span>推送设置</span>
+        </div>
       </nav>
     </aside>
   </div>
@@ -253,6 +268,7 @@ const pageTitle = computed(() => {
     AccountLogs: '运行日志',
     AccountStats: '统计明细',
     AdminUsers: '用户管理',
+    NotificationSettings: '推送设置',
   }
   return titles[route.name] || 'QQ农场助手'
 })
@@ -263,7 +279,7 @@ function goMobile(path) {
 }
 
 function onAccountChange(uin) {
-  if (uin && route.name !== 'Dashboard' && route.name !== 'AdminUsers') {
+  if (uin && route.name !== 'Dashboard' && route.name !== 'AdminUsers' && route.name !== 'NotificationSettings') {
     router.push(`/account/${uin}`)
   }
 }
@@ -275,7 +291,7 @@ async function fetchAccounts() {
     // 如果当前选中的账号已被删除或不再属于自己
     if (currentUin.value && !ownAccounts.value.find(a => a.uin === currentUin.value)) {
       currentUin.value = ''
-      if (route.name !== 'Dashboard' && route.name !== 'AdminUsers') {
+      if (route.name !== 'Dashboard' && route.name !== 'AdminUsers' && route.name !== 'NotificationSettings') {
         router.push('/dashboard')
       }
     }

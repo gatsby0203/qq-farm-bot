@@ -6,17 +6,26 @@
           <img :src="'/main.svg'" class="login-logo" alt="Logo" />
         </div>
         <h1>QQ 农场助手</h1>
-        <p class="login-subtitle">多账号自动化管理平台(admin)</p>
+        <p class="login-subtitle">多账号自动化管理平台</p>
       </div>
 
-      <!-- 登录/注册切换 -->
-      <div class="tab-switch">
+      <!-- 首次初始化提示 -->
+      <div v-if="isFirstSetup" class="first-setup-banner">
+        <div class="banner-icon">🛡️</div>
+        <div class="banner-text">
+          <strong>系统初始化</strong>
+          <span>首次使用，请创建管理员账户</span>
+        </div>
+      </div>
+
+      <!-- 登录/注册切换（首次初始化时隐藏 tab，强制显示注册） -->
+      <div v-if="!isFirstSetup" class="tab-switch">
         <div class="tab-item" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</div>
         <div class="tab-item" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</div>
       </div>
 
       <!-- 登录表单 -->
-      <el-form v-if="mode === 'login'" :model="form" @submit.prevent="handleLogin" class="login-form">
+      <el-form v-if="mode === 'login' && !isFirstSetup" :model="form" @submit.prevent="handleLogin" class="login-form">
         <el-form-item>
           <el-input
             v-model="form.username"
@@ -79,13 +88,13 @@
           />
         </el-form-item>
         <el-button
-          type="primary"
+          :type="isFirstSetup ? 'success' : 'primary'"
           size="large"
           :loading="loading"
           @click="handleRegister"
           style="width: 100%;"
         >
-          注册
+          {{ isFirstSetup ? '创建管理员账户' : '注册' }}
         </el-button>
       </el-form>
     </div>
@@ -93,24 +102,34 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth.js'
+import api from '../api/index.js'
 
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const mode = ref('login')
-const form = ref({ 
-  username: 'admin', 
-  password: 'admin123' 
-})
+const isFirstSetup = ref(false)
+const form = ref({ username: '', password: '' })
 const regForm = ref({ username: '', password: '', confirmPassword: '' })
 
 // 已登录直接跳转
 if (auth.isLoggedIn) router.replace('/dashboard')
+
+// 检查系统是否为首次初始化
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/system/setup-status')
+    if (data?.data?.isFirstSetup) {
+      isFirstSetup.value = true
+      mode.value = 'register'
+    }
+  } catch { /* 忽略网络异常，默认登录模式 */ }
+})
 
 async function handleLogin() {
   if (!form.value.username || !form.value.password) {
@@ -141,7 +160,7 @@ async function handleRegister() {
   loading.value = true
   try {
     await auth.register(regForm.value.username, regForm.value.password)
-    ElMessage.success('注册成功')
+    ElMessage.success(isFirstSetup.value ? '管理员账户已创建' : '注册成功')
     router.replace('/dashboard')
   } catch (err) {
     ElMessage.error(err.message || '注册失败')
@@ -250,5 +269,38 @@ async function handleRegister() {
 
 .login-form :deep(.el-input__inner) {
   color: var(--text);
+}
+
+.first-setup-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(52, 199, 89, 0.12), rgba(48, 209, 88, 0.06));
+  border: 1px solid rgba(52, 199, 89, 0.3);
+}
+
+.banner-icon {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.banner-text strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.banner-text span {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 </style>

@@ -1,7 +1,20 @@
+/**
+ * notification-service.js - 通用推送服务
+ *
+ * 支持邮件和 ServerChan 两种推送渠道
+ * 接受显式的渠道配置，不依赖全局设置
+ */
+
 const https = require('https');
 const emailService = require('./email-service');
-const db = require('./database');
 
+/**
+ * 向指定 ServerChan 渠道发送消息
+ * @param {'sc3'|'turbo'} type - 方糖通道类型
+ * @param {string} sendKey - SendKey
+ * @param {string} title - 消息标题
+ * @param {string} desp - Markdown 内容
+ */
 async function sendServerChan(type, sendKey, title, desp) {
     return new Promise((resolve, reject) => {
         let options;
@@ -37,9 +50,7 @@ async function sendServerChan(type, sendKey, title, desp) {
             res.on('end', () => {
                 try {
                     const result = JSON.parse(data);
-                    if (result.code !== 0) {
-                        return reject(new Error(result.message || 'ServerChan API Error'));
-                    }
+                    if (result.code !== 0) return reject(new Error(result.message || 'ServerChan API Error'));
                     resolve(result);
                 } catch (e) {
                     reject(new Error(`Failed to parse ServerChan response: ${data}`));
@@ -54,35 +65,36 @@ async function sendServerChan(type, sendKey, title, desp) {
 }
 
 /**
- * 通用推送方法
+ * 通用推送方法 (使用显式渠道配置)
  * @param {string} title - 标题
- * @param {string} md - Markdown 格式文本内容 (方糖会直接使用，邮件会将 Markdown 转 HTML)
- * @param {string} html - 可选，邮件可以直接使用 HTML。如果未提供，会自动从 md 转换
- * @param {object} options - 开关选项 { useEmail: true/false, useSc: true/false }
+ * @param {string} md - Markdown 格式内容
+ * @param {string} html - HTML 格式内容 (可选)
+ * @param {object} channelConfig - 渠道配置
+ * @param {string} channelConfig.mailTo - 收件邮箱
+ * @param {boolean} channelConfig.useEmail - 是否邮件推送
+ * @param {string} channelConfig.scType - 方糖类型 ('sc3'|'turbo')
+ * @param {string} channelConfig.scKey - 方糖 SendKey
+ * @param {boolean} channelConfig.useSc - 是否方糖推送
  */
-async function pushNotification(title, md, html, options = {}) {
-    const { useEmail, useSc } = options;
-    const mailSettings = db.getMailSettings(); // 读取全局通知配置
+async function pushNotification(title, md, html, channelConfig = {}) {
+    const { mailTo, useEmail, scType, scKey, useSc } = channelConfig;
+    const tasks = [];
 
-    let tasks = [];
-
-    if (useEmail && mailSettings.mailTo) {
+    if (useEmail && mailTo) {
         let finalHtml = html;
         if (!finalHtml) {
-            // 简单的 markdown 换行到 br 转换 (如果有复杂的 markdown 建议引入 markeed 等库，这里由于之前都是直接传 html，兼容处理)
             finalHtml = md.replace(/\n/g, '<br/>');
         }
-
         tasks.push(
-            emailService.sendWithRetry(mailSettings.mailTo, title, finalHtml)
-                .then(() => console.log(`[推送] ${title} - 邮件发送成功`))
+            emailService.sendWithRetry(mailTo, title, finalHtml)
+                .then(() => console.log(`[推送] ${title} - 邮件发送成功 -> ${mailTo}`))
                 .catch(err => console.error(`[推送] ${title} - 邮件发送失败: ${err.message}`))
         );
     }
 
-    if (useSc && mailSettings.serverChanKey) {
+    if (useSc && scKey) {
         tasks.push(
-            sendServerChan(mailSettings.serverChanType, mailSettings.serverChanKey, title, md)
+            sendServerChan(scType || 'sc3', scKey, title, md)
                 .then(() => console.log(`[推送] ${title} - ServerChan 发送成功`))
                 .catch(err => console.error(`[推送] ${title} - ServerChan 发送失败: ${err.message}`))
         );

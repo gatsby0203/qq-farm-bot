@@ -185,6 +185,23 @@ async function initDatabase() {
         )
     `);
 
+    // 创建用户推送设置表 (每个用户独立的推送配置)
+    db.run(`
+        CREATE TABLE IF NOT EXISTS user_notification_settings (
+            admin_user_id INTEGER PRIMARY KEY,
+            mail_to TEXT DEFAULT '',
+            mail_disconnect_enabled INTEGER DEFAULT 0,
+            sc_type TEXT DEFAULT 'sc3',
+            sc_key TEXT DEFAULT '',
+            sc_disconnect_enabled INTEGER DEFAULT 0,
+            report_hourly_enabled INTEGER DEFAULT 0,
+            report_daily_enabled INTEGER DEFAULT 0,
+            report_push_email INTEGER DEFAULT 0,
+            report_push_sc INTEGER DEFAULT 0,
+            report_uins TEXT DEFAULT ''
+        )
+    `);
+
     // 迁移: 添加 preferred_seed_id 列
     try { db.run(`ALTER TABLE users ADD COLUMN preferred_seed_id INTEGER DEFAULT 0`); } catch (e) { /* 列已存在 */ }
 
@@ -667,6 +684,99 @@ function ensureDefaultAdmin() {
     }
 }
 
+// ============ 用户推送设置 ============
+
+/** 获取指定用户的推送设置 */
+function getUserNotificationSettings(adminUserId) {
+    const row = queryOne(`SELECT * FROM user_notification_settings WHERE admin_user_id = ?`, [adminUserId]);
+    if (!row) {
+        return {
+            mailTo: '', mailDisconnectEnabled: false,
+            scType: 'sc3', scKey: '', scDisconnectEnabled: false,
+            reportHourlyEnabled: false, reportDailyEnabled: false,
+            reportPushEmail: false, reportPushSc: false, reportUins: '',
+        };
+    }
+    return {
+        mailTo: row.mail_to || '',
+        mailDisconnectEnabled: !!row.mail_disconnect_enabled,
+        scType: row.sc_type || 'sc3',
+        scKey: row.sc_key || '',
+        scDisconnectEnabled: !!row.sc_disconnect_enabled,
+        reportHourlyEnabled: !!row.report_hourly_enabled,
+        reportDailyEnabled: !!row.report_daily_enabled,
+        reportPushEmail: !!row.report_push_email,
+        reportPushSc: !!row.report_push_sc,
+        reportUins: row.report_uins || '',
+    };
+}
+
+/** 保存指定用户的推送设置 */
+function saveUserNotificationSettings(adminUserId, s) {
+    const exists = queryOne(`SELECT admin_user_id FROM user_notification_settings WHERE admin_user_id = ?`, [adminUserId]);
+    const vals = [
+        s.mailTo || '', s.mailDisconnectEnabled ? 1 : 0,
+        s.scType || 'sc3', s.scKey || '', s.scDisconnectEnabled ? 1 : 0,
+        s.reportHourlyEnabled ? 1 : 0, s.reportDailyEnabled ? 1 : 0,
+        s.reportPushEmail ? 1 : 0, s.reportPushSc ? 1 : 0,
+        s.reportUins || '',
+    ];
+    if (exists) {
+        run(`UPDATE user_notification_settings SET
+            mail_to=?, mail_disconnect_enabled=?, sc_type=?, sc_key=?, sc_disconnect_enabled=?,
+            report_hourly_enabled=?, report_daily_enabled=?, report_push_email=?, report_push_sc=?, report_uins=?
+            WHERE admin_user_id=?`, [...vals, adminUserId]);
+    } else {
+        run(`INSERT INTO user_notification_settings
+            (admin_user_id, mail_to, mail_disconnect_enabled, sc_type, sc_key, sc_disconnect_enabled,
+             report_hourly_enabled, report_daily_enabled, report_push_email, report_push_sc, report_uins)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [adminUserId, ...vals]);
+    }
+    saveToFile();
+}
+
+/** 获取所有已启用汇报的用户设置列表 */
+function getAllReportEnabledUsers() {
+    return queryAll(`SELECT uns.*, au.role, au.allowed_uins
+        FROM user_notification_settings uns
+        JOIN admin_users au ON uns.admin_user_id = au.id
+        WHERE uns.report_hourly_enabled = 1 OR uns.report_daily_enabled = 1`
+    ).map(row => ({
+        adminUserId: row.admin_user_id,
+        role: row.role,
+        allowedUins: row.allowed_uins || '',
+        mailTo: row.mail_to || '',
+        scType: row.sc_type || 'sc3',
+        scKey: row.sc_key || '',
+        reportHourlyEnabled: !!row.report_hourly_enabled,
+        reportDailyEnabled: !!row.report_daily_enabled,
+        reportPushEmail: !!row.report_push_email,
+        reportPushSc: !!row.report_push_sc,
+        reportUins: row.report_uins || '',
+    }));
+}
+
+/** 获取某个 UIN 对应的所有应接收断线提醒的用户 */
+function getDisconnectAlertUsers(uin) {
+    const allUsers = queryAll(`SELECT uns.*, au.role, au.allowed_uins
+        FROM user_notification_settings uns
+        JOIN admin_users au ON uns.admin_user_id = au.id
+        WHERE uns.mail_disconnect_enabled = 1 OR uns.sc_disconnect_enabled = 1`
+    );
+    return allUsers.filter(row => {
+        if (row.role === 'admin') return true;
+        const allowed = (row.allowed_uins || '').split(',').map(s => s.trim());
+        return allowed.includes(String(uin));
+    }).map(row => ({
+        adminUserId: row.admin_user_id,
+        mailTo: row.mail_to || '',
+        scType: row.sc_type || 'sc3',
+        scKey: row.sc_key || '',
+        mailDisconnectEnabled: !!row.mail_disconnect_enabled,
+        scDisconnectEnabled: !!row.sc_disconnect_enabled,
+    }));
+}
+
 function closeDatabase() {
     if (saveTimer) { clearInterval(saveTimer); saveTimer = null; }
     if (db) {
@@ -710,14 +820,19 @@ module.exports = {
     addStatistic,
     getHourlyStatistics,
     getDailyStatistics,
-    // 邮件设置
+    // 邮件设置 (全局，保留向后兼容)
     getMailSettings,
     saveMailSettings,
-    // 汇报
+    // 汇报 (全局，保留向后兼容)
     getReportSettings,
     saveReportSettings,
     getReportStatistics,
     getStealRanking,
     getReportStatisticsByUin,
     getStealRankingByUin,
+    // 用户推送设置
+    getUserNotificationSettings,
+    saveUserNotificationSettings,
+    getAllReportEnabledUsers,
+    getDisconnectAlertUsers,
 };

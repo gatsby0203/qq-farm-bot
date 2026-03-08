@@ -619,7 +619,43 @@ router.put('/announcement', adminOnly, (req, res) => {
 });
 
 // ============================================================
-//  汇报设置
+//  用户推送设置 (每个用户独立)
+// ============================================================
+
+/** GET /api/user/notification-settings */
+router.get('/user/notification-settings', authMiddleware, (req, res) => {
+    try {
+        const settings = db.getUserNotificationSettings(req.user.id);
+        res.json({ ok: true, data: settings });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** PUT /api/user/notification-settings */
+router.put('/user/notification-settings', authMiddleware, (req, res) => {
+    try {
+        db.saveUserNotificationSettings(req.user.id, req.body || {});
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+/** POST /api/user/notification-test - 发送测试推送 */
+router.post('/user/notification-test', authMiddleware, async (req, res) => {
+    try {
+        const { generateAndSendReportForUser } = require('./report-service');
+        await generateAndSendReportForUser('hourly', req.user.id, true);
+        res.json({ ok: true, message: '测试推送已发送' });
+    } catch (err) {
+        console.error('[API 测试推送失败]', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ============================================================
+//  汇报设置 (旧全局接口，保留向后兼容)
 // ============================================================
 
 const { generateAndSendReport } = require('./report-service');

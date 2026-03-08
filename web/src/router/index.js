@@ -53,6 +53,11 @@ const routes = [
         component: () => import('../views/AdminUsers.vue'),
         meta: { admin: true },
       },
+      {
+        path: 'notifications',
+        name: 'NotificationSettings',
+        component: () => import('../views/NotificationSettings.vue'),
+      },
     ],
   },
 ]

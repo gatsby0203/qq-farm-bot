@@ -46,87 +46,6 @@
       </el-table>
     </div>
 
-  <!-- 全局通知渠道设置 -->
-  <div class="section-card" style="margin-top: 20px;">
-    <div class="section-header">
-      <h3 class="section-title">🌐 全局通知渠道配置</h3>
-    </div>
-    <el-form :model="mailForm" label-width="120px" style="max-width: 500px;" v-loading="mailLoading">
-      <el-form-item label="接收邮箱">
-        <el-input
-          v-model="mailForm.mailTo"
-          placeholder="请输入接收邮件的邮箱地址"
-          style="max-width: 320px;"
-        />
-      </el-form-item>
-      <el-form-item label="方糖通道">
-        <el-radio-group v-model="mailForm.serverChanType">
-          <el-radio label="sc3">Server酱³</el-radio>
-          <el-radio label="turbo">Server酱Turbo</el-radio>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item label="方糖 SendKey">
-        <el-input v-model="mailForm.serverChanKey" placeholder="请输入 SendKey" clearable style="max-width: 320px;"></el-input>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="saveMailConfig" :loading="mailSaving">保存全局配置</el-button>
-      </el-form-item>
-    </el-form>
-    <el-alert type="info" :closable="false" style="margin-top: 8px;">
-      <span>SMTP 发件配置通过环境变量 <code>MAIL_HOST</code> / <code>MAIL_USER</code> / <code>MAIL_PASS</code> 配置。此处的配置将被以下各个通知事件共享使用。</span>
-    </el-alert>
-  </div>
-
-  <!-- 掉线通知设置 -->
-  <div class="section-card" style="margin-top: 20px;">
-    <div class="section-header">
-      <h3 class="section-title">⚠️ 掉线提醒通知</h3>
-    </div>
-    <el-form :model="mailForm" label-width="120px" style="max-width: 500px;" v-loading="mailLoading">
-      <el-form-item label="邮件推送">
-        <el-switch v-model="mailForm.mailEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">通过全局邮箱接收账号异常断线提醒</span>
-      </el-form-item>
-      <el-form-item label="方糖推送">
-        <el-switch v-model="mailForm.serverChanEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">通过全局方糖频道接收账号异常断线提醒</span>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="saveMailConfig" :loading="mailSaving">保存事件配置</el-button>
-      </el-form-item>
-    </el-form>
-  </div>
-
-  <!-- 汇报设置 -->
-  <div class="section-card" style="margin-top: 20px;">
-    <div class="section-header">
-      <h3 class="section-title">📊 定时汇报通知</h3>
-    </div>
-    <el-form :model="reportForm" label-width="120px" style="max-width: 500px;" v-loading="reportLoading">
-      <el-form-item label="每小时汇报">
-        <el-switch v-model="reportForm.hourlyEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">每小时整点发送收获/偷菜统计</span>
-      </el-form-item>
-      <el-form-item label="每日汇报">
-        <el-switch v-model="reportForm.dailyEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">每天早上 8:00 发送昨日统计汇总</span>
-      </el-form-item>
-      <el-divider border-style="dashed"></el-divider>
-      <el-form-item label="邮件推送">
-        <el-switch v-model="reportForm.pushEmailEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">通过全局邮箱接收</span>
-      </el-form-item>
-      <el-form-item label="方糖推送">
-        <el-switch v-model="reportForm.serverChanEnabled" />
-        <span class="field-hint" style="margin-left: 10px;">通过全局方糖频道接收</span>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="saveReportConfig" :loading="reportSaving">保存事件配置</el-button>
-        <el-button @click="sendTestReport('hourly')" :loading="reportTesting" style="margin-left: 10px;">发送测试汇报</el-button>
-      </el-form-item>
-    </el-form>
-  </div>
-
     <!-- 添加/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
@@ -174,7 +93,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getAccounts, getMailSettings, saveMailSettings, getReportSettings, saveReportSettings, testReport } from '../api/index.js'
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, getAccounts } from '../api/index.js'
 
 const users = ref([])
 const loading = ref(false)
@@ -197,10 +116,9 @@ async function fetchUsers() {
     const res = await getAdminUsers()
     users.value = (res.data || []).map(u => ({
       ...u,
-      // allowed_uins 是逗号分隔的字符串，不是 JSON
       allowedUins: u.allowed_uins ? u.allowed_uins.split(',').map(s => s.trim()).filter(Boolean) : [],
     }))
-  } catch (e) { 
+  } catch (e) {
     console.error('fetchUsers error:', e)
   } finally {
     loading.value = false
@@ -233,26 +151,17 @@ function openEdit(row) {
 }
 
 async function handleSave() {
-  if (!form.value.username) {
-    ElMessage.warning('请输入用户名')
-    return
-  }
-  if (!isEdit.value && !form.value.password) {
-    ElMessage.warning('请输入密码')
-    return
-  }
+  if (!form.value.username) return ElMessage.warning('请输入用户名')
+  if (!isEdit.value && !form.value.password) return ElMessage.warning('请输入密码')
 
   saving.value = true
   try {
     const payload = {
       username: form.value.username,
       role: form.value.role,
-      // 使用逗号分隔格式，不是 JSON
       allowedUins: form.value.role === 'admin' ? '' : form.value.allowedUins.join(','),
     }
-    if (form.value.password) {
-      payload.password = form.value.password
-    }
+    if (form.value.password) payload.password = form.value.password
 
     if (isEdit.value) {
       await updateAdminUser(form.value.id, payload)
@@ -274,9 +183,7 @@ async function handleSave() {
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm(`确定要删除用户 "${row.username}" 吗?`, '警告', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
     })
     await deleteAdminUser(row.id)
     ElMessage.success('已删除')
@@ -284,100 +191,9 @@ async function handleDelete(row) {
   } catch { /* cancel */ }
 }
 
-// 全局和掉线设置
-const mailForm = ref({ mailTo: '', mailEnabled: false, serverChanEnabled: false, serverChanType: 'sc3', serverChanKey: '' })
-const mailLoading = ref(false)
-const mailSaving = ref(false)
-
-async function fetchMailSettings() {
-  mailLoading.value = true
-  try {
-    const res = await getMailSettings()
-    if (res.ok && res.data) {
-      mailForm.value.mailTo = res.data.mailTo || ''
-      mailForm.value.mailEnabled = !!res.data.mailEnabled
-      mailForm.value.serverChanEnabled = !!res.data.serverChanEnabled
-      mailForm.value.serverChanType = res.data.serverChanType || 'sc3'
-      mailForm.value.serverChanKey = res.data.serverChanKey || ''
-    }
-  } catch { /* ignore */ } finally {
-    mailLoading.value = false
-  }
-}
-
-async function saveMailConfig() {
-  mailSaving.value = true
-  try {
-    await saveMailSettings({
-      mailTo: mailForm.value.mailTo,
-      mailEnabled: mailForm.value.mailEnabled,
-      serverChanEnabled: mailForm.value.serverChanEnabled,
-      serverChanType: mailForm.value.serverChanType,
-      serverChanKey: mailForm.value.serverChanKey
-    })
-    ElMessage.success('配置已保存')
-  } catch (e) {
-    ElMessage.error(e.message)
-  } finally {
-    mailSaving.value = false
-  }
-}
-
-// 汇报设置
-const reportForm = ref({ hourlyEnabled: false, dailyEnabled: false, pushEmailEnabled: true, serverChanEnabled: false })
-const reportLoading = ref(false)
-const reportSaving = ref(false)
-const reportTesting = ref(false)
-
-async function fetchReportSettings() {
-  reportLoading.value = true
-  try {
-    const res = await getReportSettings()
-    if (res.ok && res.data) {
-      reportForm.value.hourlyEnabled = !!res.data.hourlyEnabled
-      reportForm.value.dailyEnabled = !!res.data.dailyEnabled
-      reportForm.value.pushEmailEnabled = res.data.pushEmailEnabled !== false
-      reportForm.value.serverChanEnabled = !!res.data.serverChanEnabled
-    }
-  } catch { /* ignore */ } finally {
-    reportLoading.value = false
-  }
-}
-
-async function saveReportConfig() {
-  reportSaving.value = true
-  try {
-    await saveReportSettings({
-      hourlyEnabled: reportForm.value.hourlyEnabled,
-      dailyEnabled: reportForm.value.dailyEnabled,
-      pushEmailEnabled: reportForm.value.pushEmailEnabled,
-      serverChanEnabled: reportForm.value.serverChanEnabled
-    })
-    ElMessage.success('汇报设置已保存')
-  } catch (e) {
-    ElMessage.error(e.message)
-  } finally {
-    reportSaving.value = false
-  }
-}
-
-async function sendTestReport(type) {
-  reportTesting.value = true
-  try {
-    await testReport(type)
-    ElMessage.success('测试汇报已发送，请检查邮箱')
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || e.message)
-  } finally {
-    reportTesting.value = false
-  }
-}
-
 onMounted(() => {
   fetchUsers()
   fetchAccounts()
-  fetchMailSettings()
-  fetchReportSettings()
 })
 </script>
 
@@ -389,33 +205,27 @@ onMounted(() => {
   padding: 20px;
   box-shadow: var(--shadow);
 }
-
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
-
 .section-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
   margin: 0;
 }
-
 .hint-text {
   color: var(--text-faint);
   font-style: italic;
 }
-
 .field-hint {
   color: var(--text-muted);
   font-size: 12px;
   margin-top: 4px;
 }
-
-/* 暗色表格 */
 :deep(.el-table) {
   --el-table-bg-color: var(--bg-surface);
   --el-table-tr-bg-color: var(--bg-surface);
@@ -424,32 +234,17 @@ onMounted(() => {
   --el-table-text-color: var(--text-secondary);
   --el-table-row-hover-bg-color: var(--bg-hover);
 }
-
 :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
   background: var(--bg-base);
 }
-
-/* 对话框 */
 :deep(.el-dialog) {
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
 }
-
-:deep(.el-dialog__title) {
-  color: var(--text);
-}
-
-:deep(.el-dialog__headerbtn .el-dialog__close) {
-  color: var(--text-muted);
-}
-
+:deep(.el-dialog__title) { color: var(--text); }
+:deep(.el-dialog__headerbtn .el-dialog__close) { color: var(--text-muted); }
 @media (max-width: 768px) {
-  .section-card {
-    padding: 12px;
-  }
-
-  :deep(.el-dialog) {
-    width: 92% !important;
-  }
+  .section-card { padding: 12px; }
+  :deep(.el-dialog) { width: 92% !important; }
 }
 </style>
