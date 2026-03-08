@@ -9,12 +9,37 @@ const { PlantPhase } = require('./constants');
 const { sleep, toLong, toNum } = require('./utils');
 const db = require('../database');
 
+function parseTimeToMinutes(value) {
+    const m = String(value || '').trim().match(/^(\d{1,2}):(\d{1,2})$/);
+    if (!m) return null;
+    const h = Number.parseInt(m[1], 10);
+    const min = Number.parseInt(m[2], 10);
+    if (Number.isNaN(h) || Number.isNaN(min) || h < 0 || h > 23 || min < 0 || min > 59) return null;
+    return h * 60 + min;
+}
+
+function inFriendQuietHours(toggles, now = new Date()) {
+    if (!toggles || !toggles.friendQuietEnabled) return false;
+    const start = parseTimeToMinutes(toggles.friendQuietStart);
+    const end = parseTimeToMinutes(toggles.friendQuietEnd);
+    if (start === null || end === null) return false;
+
+    const cur = now.getHours() * 60 + now.getMinutes();
+    if (start === end) return true;
+    if (start < end) return cur >= start && cur < end;
+    return cur >= start || cur < end;
+}
+
 const FriendActions = {
     async getAllFriends() {
         if (this.platform === 'qq') {
-            const body = types.SyncAllFriendsRequest.encode(types.SyncAllFriendsRequest.create({ open_ids: [] })).finish();
+            const syncReq = types.SyncAllRequest || types.SyncAllFriendsRequest;
+            const syncRep = types.SyncAllReply || types.SyncAllFriendsReply;
+            if (!syncReq || !syncRep) throw new Error('SyncAll 接口类型未加载');
+
+            const body = syncReq.encode(syncReq.create({ open_ids: [] })).finish();
             const { body: replyBody } = await this.sendMsgAsync('gamepb.friendpb.FriendService', 'SyncAll', body);
-            return types.SyncAllFriendsReply.decode(replyBody);
+            return syncRep.decode(replyBody);
         }
         const body = types.GetAllFriendsRequest.encode(types.GetAllFriendsRequest.create({})).finish();
         const { body: replyBody } = await this.sendMsgAsync('gamepb.friendpb.FriendService', 'GetAll', body);
@@ -293,6 +318,20 @@ const FriendActions = {
         this.isCheckingFriends = true;
         this._checkDailyReset();
         try {
+            if (inFriendQuietHours(this.featureToggles)) {
+                if (!this._friendQuietActive) {
+                    const start = this.featureToggles.friendQuietStart || '23:00';
+                    const end = this.featureToggles.friendQuietEnd || '07:00';
+                    this.log('好友', `当前处于静默时段 ${start}-${end}，跳过本轮巡查`);
+                    this._friendQuietActive = true;
+                }
+                return;
+            }
+            if (this._friendQuietActive) {
+                this.log('好友', '静默时段结束，恢复好友巡查');
+                this._friendQuietActive = false;
+            }
+
             const friendsReply = await this.getAllFriends();
             const friends = friendsReply.game_friends || [];
             if (friends.length === 0) return;

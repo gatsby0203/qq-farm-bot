@@ -146,6 +146,28 @@
             <span class="toggle-label">经验满也帮忙 <el-tooltip content="开启后，帮好友浇水/除草/除虫时即使当日经验次数已达上限也继续操作；关闭则经验满后跳过" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
             <el-switch v-model="toggles.helpEvenExpFull" @change="saveToggles" />
           </div>
+          <div class="toggle-row">
+            <span class="toggle-label">静默时段 <el-tooltip content="在指定时段内暂停好友巡查（偷菜/帮忙）" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
+            <el-switch v-model="toggles.friendQuietEnabled" @change="saveToggles" />
+          </div>
+          <div v-if="toggles.friendQuietEnabled" class="toggle-row sub-row">
+            <span class="toggle-label">静默时间</span>
+            <el-input
+              v-model="toggles.friendQuietStart"
+              size="small"
+              style="width: 86px"
+              placeholder="23:00"
+              @change="saveToggles"
+            />
+            <span style="opacity: .7;">-</span>
+            <el-input
+              v-model="toggles.friendQuietEnd"
+              size="small"
+              style="width: 86px"
+              placeholder="07:00"
+              @change="saveToggles"
+            />
+          </div>
         </div>
 
         <div class="toggle-group">
@@ -298,7 +320,11 @@ async function fetchData() {
   try {
     const res = await getAccountSnapshot(props.uin)
     snapshot.value = res.data
-    toggles.value = res.data.featureToggles ? { ...res.data.featureToggles } : null
+    const featureToggles = res.data.featureToggles ? { ...res.data.featureToggles } : {}
+    featureToggles.friendQuietEnabled = !!featureToggles.friendQuietEnabled
+    featureToggles.friendQuietStart = featureToggles.friendQuietStart || '23:00'
+    featureToggles.friendQuietEnd = featureToggles.friendQuietEnd || '07:00'
+    toggles.value = featureToggles
     stats.value = res.data.dailyStats || null
     // 初始化挂机时长
     if (res.data.startedAt) {

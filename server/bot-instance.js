@@ -63,6 +63,32 @@ function getCropIconFile(plantId) {
 
 function getTagIcon(tag) { return TAG_ICONS[tag] || 'ℹ️'; }
 
+function dateKeyFromServerSec(serverSec = 0) {
+    const baseMs = serverSec > 0 ? serverSec * 1000 : Date.now();
+    const bjMs = baseMs + 8 * 3600 * 1000;
+    const d = new Date(bjMs);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function normalizeDateKey(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return '';
+
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+const ORGANIC_FERTILIZER_ID = 1012;
+
 // ============ BotInstance 类 ============
 
 class BotInstance extends EventEmitter {
@@ -109,7 +135,7 @@ class BotInstance extends EventEmitter {
         this.operationLimits = new Map();
         this.expTracker = new Map();
         this.expExhausted = new Set();
-        this.lastResetDate = '';
+        this.lastResetDate = dateKeyFromServerSec();
 
         // ---------- 任务与仓库 ----------
         this.sellTimer = null;
@@ -128,9 +154,11 @@ class BotInstance extends EventEmitter {
         this.featureToggles = {
             autoHarvest: true, fastHarvest: false, autoPlant: true,
             autoFertilize: false, autoWeed: true, autoPest: true, autoWater: true,
+            fertilizerMode: 'normal', fertilizerMultiSeason: false, fertilizerSoilTypes: [],
             autoLandUnlock: true, autoLandUpgrade: true, landUpgradeTarget: 6,
             friendVisit: true, autoSteal: true, skipStealRadish: true,
             stealBlacklist: [], friendHelp: true, friendPest: true, helpEvenExpFull: true,
+            friendQuietEnabled: false, friendQuietStart: '23:00', friendQuietEnd: '07:00',
             autoTask: true, autoSell: true, autoBuyFertilizer: false,
             autoFreeGifts: true, autoShareReward: true, autoMonthCard: true,
             autoEmailReward: true, autoVipGift: true, autoIllustrated: true,
@@ -142,15 +170,17 @@ class BotInstance extends EventEmitter {
         }
 
         // ---------- 今日统计 ----------
+        const todayKey = dateKeyFromServerSec();
         this.dailyStats = {
-            date: new Date().toLocaleDateString(),
+            date: todayKey,
             expGained: 0, harvestCount: 0, stealCount: 0,
             helpWater: 0, helpWeed: 0, helpPest: 0, sellGold: 0,
         };
 
-        if (opts.dailyStats && opts.dailyStats.date === new Date().toLocaleDateString()) {
-                Object.assign(this.dailyStats, opts.dailyStats);
-            }
+        const incomingStatsDate = normalizeDateKey(opts.dailyStats && opts.dailyStats.date);
+        if (opts.dailyStats && incomingStatsDate === todayKey) {
+            Object.assign(this.dailyStats, opts.dailyStats, { date: todayKey });
+        }
         if (opts.dailyRewardState) {
             Object.assign(this.dailyRewardState, opts.dailyRewardState);
         }
@@ -194,7 +224,33 @@ class BotInstance extends EventEmitter {
         return toNum(val) > 1e12 ? Math.floor(toNum(val) / 1000) : toNum(val);
     }
 
-    async encodeMsg(serviceName, methodName, bodyBytes) {
+    _checkDailyReset() {
+        const todayKey = dateKeyFromServerSec(this.getServerTimeSec());
+        if (this.lastResetDate === todayKey) return false;
+
+        const oldDate = this.lastResetDate;
+        this.lastResetDate = todayKey;
+        this.operationLimits.clear();
+        this.expTracker.clear();
+        this.expExhausted.clear();
+        this.dailyStats = {
+            date: todayKey,
+            expGained: 0,
+            harvestCount: 0,
+            stealCount: 0,
+            helpWater: 0,
+            helpWeed: 0,
+            helpPest: 0,
+            sellGold: 0,
+        };
+        if (oldDate) {
+            this.log('系统', `跨日重置统计: ${oldDate} -> ${todayKey}`);
+        }
+        this.emit('statsUpdate', { userId: this.userId, dailyStats: this.dailyStats });
+        return true;
+    }
+
+    async encodeMsg(serviceName, methodName, bodyBytes, clientSeqValue) {
         let finalBody = bodyBytes || Buffer.alloc(0);
         if (finalBody.length > 0) {
             finalBody = await cryptoWasm.encryptBuffer(finalBody);
@@ -202,24 +258,23 @@ class BotInstance extends EventEmitter {
         const msg = types.GateMessage.create({
             meta: {
                 service_name: serviceName, method_name: methodName, message_type: 1,
-                client_seq: toLong(this.clientSeq), server_seq: toLong(this.serverSeq),
+                client_seq: toLong(clientSeqValue), server_seq: toLong(this.serverSeq),
             },
             body: finalBody,
         });
         const encoded = types.GateMessage.encode(msg).finish();
-        this.clientSeq++;
         return encoded;
     }
 
-    async sendMsg(serviceName, methodName, bodyBytes, callback) {
+    async sendMsg(serviceName, methodName, bodyBytes, callback, fixedSeq = null) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             if (callback) callback(new Error('连接未打开'));
             return false;
         }
-        const seq = this.clientSeq;
+        const seq = fixedSeq !== null ? fixedSeq : this.clientSeq++;
         let encoded;
         try {
-            encoded = await this.encodeMsg(serviceName, methodName, bodyBytes);
+            encoded = await this.encodeMsg(serviceName, methodName, bodyBytes, seq);
         } catch (err) {
             if (callback) callback(err);
             return false;
@@ -232,7 +287,15 @@ class BotInstance extends EventEmitter {
             }
             return false;
         }
-        this.ws.send(encoded);
+        try {
+            this.ws.send(encoded);
+        } catch (err) {
+            if (callback) {
+                this.pendingCallbacks.delete(seq);
+                callback(err);
+            }
+            return false;
+        }
         return true;
     }
 
@@ -243,6 +306,7 @@ class BotInstance extends EventEmitter {
                 return;
             }
             const seq = this.clientSeq;
+            this.clientSeq += 1;
             const timer = setTimeout(() => {
                 this.pendingCallbacks.delete(seq);
                 reject(new Error(`请求超时: ${methodName} (seq=${seq})`));
@@ -252,7 +316,7 @@ class BotInstance extends EventEmitter {
                 clearTimeout(timer);
                 if (err) reject(err);
                 else resolve({ body, meta });
-            }).then(sent => {
+            }, seq).then(sent => {
                 if (!sent) {
                     clearTimeout(timer);
                     reject(new Error(`发送失败: ${methodName}`));
@@ -710,6 +774,7 @@ class BotInstance extends EventEmitter {
 
     async _plantByBestSeed(landIds, unlockedCount, { manual = false } = {}) {
         let planted = 0;
+        const plantedLandIds = [];
         const queue = [...landIds];
         while (queue.length > 0) {
             let bestSeed;
@@ -724,8 +789,90 @@ class BotInstance extends EventEmitter {
             if (batch.length === 0) break;
             await this.plantSeed(batch, bestSeed.id);
             planted += batch.length;
+            plantedLandIds.push(...batch);
         }
-        return planted;
+        return { count: planted, landIds: plantedLandIds };
+    }
+
+    _normalizeFertilizerMode(input) {
+        const mode = String(input || '').trim().toLowerCase();
+        if (mode === 'normal' || mode === 'organic' || mode === 'both') return mode;
+        return this.featureToggles.autoFertilize ? 'normal' : 'none';
+    }
+
+    _normalizeFertilizerSoilTypes(input) {
+        if (!Array.isArray(input)) return [];
+        const result = [];
+        for (const item of input) {
+            const soilType = Number(item);
+            if (!Number.isFinite(soilType)) continue;
+            if (soilType < 0 || soilType > 6) continue;
+            if (result.includes(soilType)) continue;
+            result.push(soilType);
+        }
+        return result;
+    }
+
+    _filterLandIdsBySoilTypes(landIds, lands, soilTypes) {
+        const ids = [...new Set((Array.isArray(landIds) ? landIds : []).map(v => toNum(v)).filter(v => v > 0))];
+        if (ids.length === 0) return [];
+        if (!Array.isArray(soilTypes) || soilTypes.length === 0) return ids;
+
+        const selected = new Set(soilTypes.map(v => Number(v)));
+        const soilById = new Map();
+        for (const land of (Array.isArray(lands) ? lands : [])) {
+            const id = toNum(land && land.id);
+            if (!id) continue;
+            soilById.set(id, toNum(land.soil_type));
+        }
+        return ids.filter(id => selected.has(soilById.get(id)));
+    }
+
+    _collectRegrowTargets(latestLands, harvestedLandIds) {
+        const harvestedSet = new Set((Array.isArray(harvestedLandIds) ? harvestedLandIds : []).map(v => toNum(v)).filter(Boolean));
+        if (harvestedSet.size === 0) return [];
+
+        const targets = [];
+        for (const land of (latestLands || [])) {
+            const id = toNum(land && land.id);
+            if (!id || !harvestedSet.has(id)) continue;
+            if (!land.unlocked) continue;
+            const plant = land.plant;
+            if (!plant || !plant.phases || plant.phases.length === 0) continue;
+            const currentPhase = this.getCurrentPhase(plant.phases);
+            if (!currentPhase) continue;
+            const phaseVal = toNum(currentPhase.phase);
+            if (phaseVal === PlantPhase.DEAD || phaseVal === PlantPhase.MATURE) continue;
+            targets.push(id);
+        }
+        return targets;
+    }
+
+    async _runFertilizerStrategy(targetLandIds, lands, reasonLabel = '常规施肥') {
+        if (!this.featureToggles.autoFertilize) return { normal: 0, organic: 0, applied: 0 };
+
+        const mode = this._normalizeFertilizerMode(this.featureToggles.fertilizerMode);
+        if (mode === 'none') return { normal: 0, organic: 0, applied: 0 };
+
+        const selectedSoilTypes = this._normalizeFertilizerSoilTypes(this.featureToggles.fertilizerSoilTypes);
+        const targets = this._filterLandIdsBySoilTypes(targetLandIds, lands, selectedSoilTypes);
+        if (targets.length === 0) return { normal: 0, organic: 0, applied: 0 };
+
+        let normal = 0;
+        let organic = 0;
+        if (mode === 'normal' || mode === 'both') {
+            normal = await this.fertilize(targets, NORMAL_FERTILIZER_ID);
+        }
+        if (mode === 'organic' || mode === 'both') {
+            organic = await this.fertilize(targets, ORGANIC_FERTILIZER_ID);
+        }
+
+        const applied = normal + organic;
+        if (applied > 0) {
+            const scopeText = selectedSoilTypes.length > 0 ? `土壤范围: ${selectedSoilTypes.join(',')}` : '土壤范围: 全部';
+            this.log('施肥', `${reasonLabel}完成: 普通=${normal} 有机=${organic} (${scopeText})`);
+        }
+        return { normal, organic, applied };
     }
 
     async checkFarm() {
@@ -741,9 +888,12 @@ class BotInstance extends EventEmitter {
 
             const analysis = this.analyzeLands(lands);
             const unlockedCount = lands.filter(l => l && l.unlocked).length;
+            let harvestedLandIds = [];
+            let plantedLandIds = [];
 
             if (analysis.harvestable.length > 0 && this.featureToggles.autoHarvest) {
                 try {
+                    harvestedLandIds = [...analysis.harvestable];
                     await this._harvestLands(analysis.harvestable, { manual: false });
                     this._emitStateUpdate();
                 } catch (e) { this.logWarn('收获', e.message); }
@@ -752,8 +902,26 @@ class BotInstance extends EventEmitter {
             const { toPlant } = await this._collectPlantTargets(analysis, { manual: false });
             if (toPlant.length > 0 && this.featureToggles.autoPlant) {
                 try {
-                    await this._plantByBestSeed(toPlant, unlockedCount, { manual: false });
+                    const plantedResult = await this._plantByBestSeed(toPlant, unlockedCount, { manual: false });
+                    plantedLandIds = plantedResult.landIds || [];
                 } catch (e) { this.logWarn('种植', e.message); }
+            }
+
+            if (plantedLandIds.length > 0) {
+                try {
+                    await this._runFertilizerStrategy(plantedLandIds, lands, '常规施肥');
+                } catch (e) { this.logWarn('施肥', `常规施肥失败: ${e.message}`); }
+            }
+
+            if (harvestedLandIds.length > 0 && this.featureToggles.fertilizerMultiSeason) {
+                try {
+                    const latestReply = await this.getAllLands();
+                    const latestLands = latestReply.lands || [];
+                    const regrowTargets = this._collectRegrowTargets(latestLands, harvestedLandIds);
+                    if (regrowTargets.length > 0) {
+                        await this._runFertilizerStrategy(regrowTargets, latestLands, '多季补肥');
+                    }
+                } catch (e) { this.logWarn('施肥', `多季补肥失败: ${e.message}`); }
             }
 
             if (analysis.needWater.length > 0 && this.featureToggles.autoWater) {
@@ -921,7 +1089,8 @@ class BotInstance extends EventEmitter {
 
                 const { toPlant, removedDead } = await this._collectPlantTargets(analysis, { manual: true });
                 result.removedDead = removedDead;
-                result.planted = await this._plantByBestSeed(toPlant, unlockedCount, { manual: true });
+                const plantedResult = await this._plantByBestSeed(toPlant, unlockedCount, { manual: true });
+                result.planted = plantedResult.count || 0;
             }
 
             if (doUpgrade) {
