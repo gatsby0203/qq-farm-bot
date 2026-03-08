@@ -261,6 +261,7 @@
     <AccountLoginDialog
       v-model:visible="loginDialogVisible"
       :initial-uin="props.uin"
+      :initial-platform="initialPlatform"
       @confirm="handleLoginConfirm"
       @cancel="handleDialogCancel"
     />
@@ -268,7 +269,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAccountSnapshot, updateToggles, stopBot, addAccountByCode } from '../api/index.js'
 import { onEvent, offEvent } from '../socket/index.js'
@@ -285,6 +286,12 @@ let uptimeTimer = null
 let timer = null
 
 const loginDialogVisible = ref(false)
+const initialPlatform = computed(() => {
+  if (snapshot.value?.platform === 'wx' || snapshot.value?.platform === 'qq') {
+    return snapshot.value.platform
+  }
+  return props.uin?.startsWith('wx_') ? 'wx' : 'qq'
+})
 
 async function fetchData() {
   loading.value = true

@@ -82,7 +82,7 @@
               v-if="acc.status !== 'running'"
               type="success" size="small" plain circle
               :icon="VideoPlay"
-              @click="handleStart(acc.uin)"
+              @click="handleStart(acc)"
               title="启动"
             />
             <el-button
@@ -110,6 +110,7 @@
     <AccountLoginDialog
       v-model:visible="showLoginDialog"
       :initial-uin="dialogUin"
+      :initial-platform="dialogPlatform"
       @confirm="handleLoginConfirm"
       @cancel="handleDialogCancel"
     />
@@ -136,6 +137,7 @@ const stoppedCount = computed(() => accounts.value.filter(a => a.status === 'sto
 
 const showLoginDialog = ref(false)
 const dialogUin = ref('')
+const dialogPlatform = ref('')
 
 
 async function fetchAccounts() {
@@ -150,12 +152,14 @@ async function fetchAccounts() {
 
 function handleAddAccount() {
   dialogUin.value = ''
+  dialogPlatform.value = ''
   showLoginDialog.value = true
 }
 
-async function handleStart(uin) {
+async function handleStart(account) {
   // 无法复用 Session，显示 Code 登录框以便重新输入
-  dialogUin.value = uin
+  dialogUin.value = account.uin
+  dialogPlatform.value = account.platform || (account.uin?.startsWith('wx_') ? 'wx' : 'qq')
   showLoginDialog.value = true
 }
 

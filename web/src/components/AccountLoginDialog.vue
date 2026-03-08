@@ -49,6 +49,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 const props = defineProps({
   visible: Boolean,
   initialUin: String,
+  initialPlatform: String,
 })
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
@@ -76,10 +77,20 @@ const form = ref({
 watch(() => props.visible, (visible) => {
   if (!visible) return
   form.value.authCode = ''
+
   if (props.initialUin) {
-    form.value.platform = 'qq'
     form.value.uin = props.initialUin
+    const inferredPlatform = props.initialUin.startsWith('wx_') ? 'wx' : 'qq'
+    form.value.platform = props.initialPlatform === 'wx' || props.initialPlatform === 'qq'
+      ? props.initialPlatform
+      : inferredPlatform
+    return
   }
+
+  form.value.uin = ''
+  form.value.platform = 'qq'
+  form.value.farmIntervalSec = 10
+  form.value.friendIntervalSec = 10
 })
 
 function handleSubmit() {

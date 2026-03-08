@@ -134,10 +134,10 @@ router.post('/accounts/add-by-code', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'authCode 不能为空' });
         }
 
-        const actualPlatform = platform || 'wx';
-        let uin = manualUin;
+        const normalizedPlatform = platform === 'wx' || platform === 'qq' ? platform : null;
+        let uin = (manualUin || '').toString().trim();
 
-        if (actualPlatform === 'wx' && !uin) {
+        if (normalizedPlatform === 'wx' && !uin) {
             // 微信用户如果没有提供 uin，则自动生成随机唯一标识
             uin = 'wx_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         }
@@ -148,6 +148,9 @@ router.post('/accounts/add-by-code', async (req, res) => {
 
         // 创建或更新用户记录
         let user = db.getUserByUin(uin);
+        const inferredPlatform = uin.startsWith('wx_') ? 'wx' : 'qq';
+        const actualPlatform = normalizedPlatform || user?.platform || inferredPlatform;
+
         if (!user) {
             db.createUser({ uin, platform: actualPlatform, farmInterval: farmInterval || 10000, friendInterval: friendInterval || 10000 });
         } else {
@@ -325,6 +328,7 @@ router.get('/accounts/:uin/snapshot', canAccessUin, (req, res) => {
             return res.json({
                 ok: true, data: {
                     userId: user.uin, status: 'stopped',
+                    platform: user.platform || 'qq',
                     userState: { name: user.nickname, level: user.level, gold: user.gold, exp: user.exp, gid: user.gid },
                     featureToggles: user.feature_toggles ? JSON.parse(user.feature_toggles) : null,
                     dailyStats: user.daily_stats ? JSON.parse(user.daily_stats) : null,
