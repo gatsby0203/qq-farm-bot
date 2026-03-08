@@ -124,7 +124,7 @@
                 <el-tag type="info" effect="plain" size="small">{{ formatTimeFull(scope.row.hour) }}</el-tag>
               </template>
             </el-table-column>
-            
+
             <el-table-column label="自己收菜" align="center">
               <el-table-column prop="harvest.amount" label="数量" width="80" align="center">
                 <template #default="scope">
@@ -188,7 +188,7 @@
                 <el-tag effect="light" type="success">{{ scope.row.day }}</el-tag>
               </template>
             </el-table-column>
-            
+
             <el-table-column label="自己收获" align="center">
               <el-table-column prop="harvest.amount" label="收获数量" width="100" align="center"></el-table-column>
               <el-table-column prop="harvest.gold" label="收获收益" min-width="120" align="center">
@@ -249,7 +249,7 @@ async function fetchData() {
       getAccountStatistics(props.uin, 24),
       getAccountDailyStatistics(props.uin, 7)
     ])
-    
+
     if (hRes.ok) statsData.value = hRes.data || []
     if (dRes.ok) dailyStatsData.value = dRes.data || []
   } catch (e) {
@@ -318,23 +318,23 @@ const trendChartOption = computed(() => {
   const hours = statsData.value.map(row => formatTime(row.hour));
   const stealGolds = statsData.value.map(row => row.steal.gold || 0);
   const harvestGolds = statsData.value.map(row => row.harvest.gold || 0);
-  
+
   return {
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'cross' }
     },
     legend: { data: ['自己收菜', '外头偷菜'], top: '0%' },
     grid: { left: '3%', right: '4%', bottom: '5%', containLabel: true },
-    xAxis: { 
-      type: 'category', 
-      boundaryGap: false, 
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
       data: hours,
       axisLabel: { color: '#888' },
       axisLine: { lineStyle: { color: '#eee' } }
     },
-    yAxis: { 
-      type: 'value', 
+    yAxis: {
+      type: 'value',
       name: '金币收益',
       splitLine: { lineStyle: { type: 'dashed', color: '#eee' } }
     },
@@ -400,7 +400,7 @@ const pieChartOption = computed(() => {
      const otherValue = sorted.slice(5).reduce((acc, cur) => acc + cur.value, 0);
      topCrops.push({ name: '其他', value: otherValue });
   }
-  
+
   return {
     tooltip: { trigger: 'item', formatter: '{b} <br/> {c} 金币 ({d}%)' },
     legend: { orient: 'horizontal', bottom: '0%' },
@@ -433,7 +433,7 @@ watch(() => props.uin, () => {
 <style scoped>
 .account-stats-modern {
   padding: 24px;
-  background: #f5f7fa;
+  background: var(--bg-base);
   min-height: calc(100vh - 60px);
 }
 
@@ -618,7 +618,7 @@ watch(() => props.uin, () => {
 }
 
 :deep(.el-table) {
-  --el-table-header-bg-color: #f7f9fc;
+  --el-table-header-bg-color: var(--bg-hover);
   border-radius: 8px;
   overflow: hidden;
 }

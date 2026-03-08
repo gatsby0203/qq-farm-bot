@@ -22,7 +22,7 @@
         <div class="info-value">{{ formatNum(snapshot?.userState?.exp) }}</div>
       </div>
     </div>
-    
+
     <!-- 额外数据 (化肥/收藏点) -->
     <div class="extra-data-grid" v-if="snapshot?.userState?.fertilizer">
       <div class="extra-card">
@@ -286,6 +286,7 @@ const toggles = ref(null)
 const stats = ref(null)
 const uptime = ref(0)
 let uptimeTimer = null
+let timer = null
 
 // QR 扫码登录状态
 const qrDialogVisible = ref(false)
@@ -463,6 +464,7 @@ onUnmounted(() => {
   offEvent('qr:expired', onQrExpired)
   offEvent('qr:error', onQrError)
   stopUptimeTimer()
+  if (timer) clearInterval(timer)
 })
 </script>
 
@@ -655,7 +657,7 @@ onUnmounted(() => {
 }
 
 .extra-card {
-  background: var(--bg-surface); 
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 16px;
