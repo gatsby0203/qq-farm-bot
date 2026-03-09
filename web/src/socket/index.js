@@ -2,10 +2,11 @@
  * Socket.io 客户端封装
  */
 import { io } from 'socket.io-client'
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 
 // 连接状态
 export const connected = ref(false)
+const logSubscriptions = new Map()
 
 // 创建 Socket.io 连接
 const socket = io({
@@ -18,6 +19,10 @@ const socket = io({
 socket.on('connect', () => {
   connected.value = true
   console.log('[Socket] 已连接')
+  // 断线重连后恢复日志房间订阅
+  for (const uin of logSubscriptions.keys()) {
+    socket.emit('logs:subscribe', uin)
+  }
 })
 
 socket.on('disconnect', () => {
@@ -56,11 +61,27 @@ export function offEvent(event, handler) {
 // ============ 日志订阅 ============
 
 export function subscribeLogs(uin) {
-  socket.emit('logs:subscribe', uin)
+  const key = String(uin || '').trim()
+  if (!key) return
+
+  const prev = logSubscriptions.get(key) || 0
+  logSubscriptions.set(key, prev + 1)
+  if (prev === 0) {
+    socket.emit('logs:subscribe', key)
+  }
 }
 
 export function unsubscribeLogs(uin) {
-  socket.emit('logs:unsubscribe', uin)
+  const key = String(uin || '').trim()
+  if (!key) return
+
+  const prev = logSubscriptions.get(key) || 0
+  if (prev <= 1) {
+    logSubscriptions.delete(key)
+    socket.emit('logs:unsubscribe', key)
+    return
+  }
+  logSubscriptions.set(key, prev - 1)
 }
 
 export { socket }

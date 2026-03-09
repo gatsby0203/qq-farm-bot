@@ -37,9 +37,7 @@ const routes = [
       },
       {
         path: 'account/:uin/logs',
-        name: 'AccountLogs',
-        component: () => import('../views/AccountLogs.vue'),
-        props: true,
+        redirect: to => `/account/${to.params.uin}`,
       },
       {
         path: 'account/:uin/stats',

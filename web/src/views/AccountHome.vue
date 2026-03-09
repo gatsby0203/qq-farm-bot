@@ -69,161 +69,6 @@
       </span>
     </div>
 
-    <!-- 功能开关 -->
-    <div class="section-card" v-if="toggles">
-      <h3 class="section-title">功能开关</h3>
-      <div class="toggles-grid">
-        <div class="toggle-group">
-          <div class="toggle-group-title">自己农场</div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动收获 <el-tooltip content="自动收取成熟作物" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoHarvest" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动种植 <el-tooltip content="收获后自动种植新作物" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoPlant" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动施肥 <el-tooltip content="种植后自动施肥加速" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoFertilize" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动除草 <el-tooltip content="自动清除杂草" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoWeed" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动除虫 <el-tooltip content="自动清除害虫" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoPest" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动浇水 <el-tooltip content="自动给干旱地块浇水" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoWater" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动解锁土地 <el-tooltip content="自动开拓新土地" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoLandUnlock" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动升级土地 <el-tooltip content="自动升级已有土地等级" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoLandUpgrade" @change="saveToggles" />
-          </div>
-          <div v-if="toggles.autoLandUpgrade" class="toggle-row sub-row">
-            <span class="toggle-label">最高升级至</span>
-            <el-select v-model="toggles.landUpgradeTarget" size="small" @change="saveToggles" style="width: 120px">
-              <el-option :value="1" label="红土地" />
-              <el-option :value="2" label="黑土地" />
-              <el-option :value="3" label="金土地" />
-              <el-option :value="4" label="紫土地" />
-              <el-option :value="5" label="翡翠土地" />
-              <el-option :value="6" label="蓝宝石土地" />
-            </el-select>
-          </div>
-        </div>
-
-        <div class="toggle-group">
-          <div class="toggle-group-title">好友巡查</div>
-          <div class="toggle-row">
-            <span class="toggle-label">好友巡查 <el-tooltip content="定时访问好友农场" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.friendVisit" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动偷菜 <el-tooltip content="偷取好友成熟作物" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoSteal" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">不偷白萝卜 <el-tooltip content="开启后偷菜时跳过白萝卜" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.skipStealRadish" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">帮忙操作 <el-tooltip content="帮好友浇水除草" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.friendHelp" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">放虫放草 <el-tooltip content="给好友放置害虫和杂草" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.friendPest" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">经验满也帮忙 <el-tooltip content="开启后，帮好友浇水/除草/除虫时即使当日经验次数已达上限也继续操作；关闭则经验满后跳过" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.helpEvenExpFull" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">静默时段 <el-tooltip content="在指定时段内暂停好友巡查（偷菜/帮忙）" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.friendQuietEnabled" @change="saveToggles" />
-          </div>
-          <div v-if="toggles.friendQuietEnabled" class="toggle-row sub-row">
-            <span class="toggle-label">静默时间</span>
-            <el-input
-              v-model="toggles.friendQuietStart"
-              size="small"
-              style="width: 86px"
-              placeholder="23:00"
-              @change="saveToggles"
-            />
-            <span style="opacity: .7;">-</span>
-            <el-input
-              v-model="toggles.friendQuietEnd"
-              size="small"
-              style="width: 86px"
-              placeholder="07:00"
-              @change="saveToggles"
-            />
-          </div>
-        </div>
-
-        <div class="toggle-group">
-          <div class="toggle-group-title">系统</div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动任务 <el-tooltip content="自动领取已完成任务" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoTask" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动出售 <el-tooltip content="自动出售背包中果实" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoSell" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">自动购买肥料 <el-tooltip content="施肥时自动购买肥料" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoBuyFertilizer" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">图鉴奖励 <el-tooltip content="自动领取可用的图鉴奖励" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoIllustrated" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">点券购买化肥 <el-tooltip content="用点券自动购买有机化肥" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoFertilizerBuy" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">使用化肥礼包 <el-tooltip content="自动使用化肥礼包填充容器" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoFertilizerUse" @change="saveToggles" />
-          </div>
-        </div>
-
-        <div class="toggle-group">
-          <div class="toggle-group-title">每日奖励</div>
-          <div class="toggle-row">
-            <span class="toggle-label">商城免费礼包 <el-tooltip content="自动领取商城免费商品" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoFreeGifts" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">分享奖励 <el-tooltip content="自动完成分享并领取奖励" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoShareReward" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">月卡奖励 <el-tooltip content="自动领取月卡每日奖励" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoMonthCard" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">邮箱奖励 <el-tooltip content="自动领取邮件附件奖励" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoEmailReward" @change="saveToggles" />
-          </div>
-          <div class="toggle-row">
-            <span class="toggle-label">QQ会员奖励 <el-tooltip content="自动领取QQ会员每日礼包" placement="top"><el-icon :size="14"><QuestionFilled /></el-icon></el-tooltip></span>
-            <el-switch v-model="toggles.autoVipGift" @change="saveToggles" />
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- 今日统计 -->
     <div class="section-card" v-if="stats">
       <div class="section-header">
@@ -276,6 +121,9 @@
       </div>
     </div>
 
+    <!-- 运行日志（已合并到首页） -->
+    <AccountLogs :uin="props.uin" />
+
     <div v-if="!snapshot && !loading" class="empty-state">
       <el-empty description="暂无数据，请先启动 Bot" />
     </div>
@@ -293,15 +141,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getAccountSnapshot, updateToggles, stopBot, addAccountByCode } from '../api/index.js'
+import { getAccountSnapshot, stopBot, addAccountByCode } from '../api/index.js'
 import { onEvent, offEvent } from '../socket/index.js'
 import AccountLoginDialog from '../components/AccountLoginDialog.vue'
+import AccountLogs from './AccountLogs.vue'
 
 const props = defineProps({ uin: String })
 
 const loading = ref(false)
 const snapshot = ref(null)
-const toggles = ref(null)
 const stats = ref(null)
 const uptime = ref(0)
 let uptimeTimer = null
@@ -320,11 +168,6 @@ async function fetchData() {
   try {
     const res = await getAccountSnapshot(props.uin)
     snapshot.value = res.data
-    const featureToggles = res.data.featureToggles ? { ...res.data.featureToggles } : {}
-    featureToggles.friendQuietEnabled = !!featureToggles.friendQuietEnabled
-    featureToggles.friendQuietStart = featureToggles.friendQuietStart || '23:00'
-    featureToggles.friendQuietEnd = featureToggles.friendQuietEnd || '07:00'
-    toggles.value = featureToggles
     stats.value = res.data.dailyStats || null
     // 初始化挂机时长
     if (res.data.startedAt) {
@@ -350,14 +193,6 @@ function stopUptimeTimer() {
   if (uptimeTimer) {
     clearInterval(uptimeTimer)
     uptimeTimer = null
-  }
-}
-
-async function saveToggles() {
-  try {
-    await updateToggles(props.uin, toggles.value)
-  } catch (e) {
-    ElMessage.error('保存失败: ' + e.message)
   }
 }
 
@@ -567,41 +402,6 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-/* 功能开关 */
-.toggles-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-.toggle-group-title {
-  font-size: 13px;
-  color: var(--text);
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-
-.toggle-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-}
-
-.toggle-label {
-  font-size: 14px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.toggle-label .el-icon {
-  color: var(--text-muted);
-  cursor: help;
-}
-
 /* 今日统计 */
 .stats-detail-grid {
   display: grid;
@@ -727,11 +527,6 @@ onUnmounted(() => {
     font-size: 18px;
   }
 
-  .toggles-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
   .stats-detail-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
@@ -740,15 +535,6 @@ onUnmounted(() => {
   .section-card {
     padding: 14px;
   }
-}
-.toggle-row.sub-row {
-  margin-top: -8px;
-  padding-left: 20px;
-  margin-bottom: 8px;
-}
-.toggle-row.sub-row .toggle-label {
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 </style>

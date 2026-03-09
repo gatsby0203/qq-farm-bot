@@ -38,8 +38,8 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { io } from 'socket.io-client'
 import { getAccountLogs } from '../api/index.js'
+import { subscribeLogs, unsubscribeLogs, onEvent, offEvent } from '../socket/index.js'
 
 const props = defineProps({ uin: String })
 
@@ -48,7 +48,6 @@ const autoScroll = ref(true)
 const logContainer = ref(null)
 const tagFilter = ref('')
 const levelFilter = ref('')
-let socket = null
 
 const availableTags = computed(() => {
   const tags = new Set()
@@ -94,6 +93,7 @@ function clearLogs() {
 }
 
 async function fetchInitialLogs() {
+  if (!props.uin) return
   try {
     const res = await getAccountLogs(props.uin)
     logs.value = res.data || []
@@ -101,54 +101,39 @@ async function fetchInitialLogs() {
   } catch { /* */ }
 }
 
-function setupSocket() {
-  const baseURL = window.location.protocol + '//' + window.location.hostname + ':3000'
-  socket = io(baseURL, { transports: ['websocket'] })
+function onBotLog(data) {
+  if (String(data.userId) !== String(props.uin)) return
+  logs.value.push(data)
+  if (logs.value.length > 2000) {
+    logs.value = logs.value.slice(-1500)
+  }
+  scrollToBottom()
+}
 
-  socket.on('connect', () => {
-    // 订阅该账号的日志房间
-    socket.emit('logs:subscribe', props.uin)
-  })
-
-  socket.on('bot:log', (data) => {
-    // 服务端字段是 userId 而非 uin
-    if (String(data.userId) !== String(props.uin)) return
-    logs.value.push(data)
-    // 限制最大日志条数
-    if (logs.value.length > 2000) {
-      logs.value = logs.value.slice(-1500)
-    }
-    scrollToBottom()
-  })
-
-  // 服务端也会推送 logs:history
-  socket.on('logs:history', (data) => {
-    if (String(data.uin) !== String(props.uin)) return
-    logs.value = data.logs || []
-    scrollToBottom()
-  })
+function onLogsHistory(data) {
+  if (String(data.uin) !== String(props.uin)) return
+  logs.value = data.logs || []
+  scrollToBottom()
 }
 
 watch(() => props.uin, (newUin, oldUin) => {
   logs.value = []
-  if (socket && socket.connected) {
-    if (oldUin) socket.emit('logs:unsubscribe', oldUin)
-    socket.emit('logs:subscribe', newUin)
-  }
+  if (oldUin) unsubscribeLogs(oldUin)
+  if (newUin) subscribeLogs(newUin)
   fetchInitialLogs()
 })
 
 onMounted(() => {
+  onEvent('bot:log', onBotLog)
+  onEvent('logs:history', onLogsHistory)
+  if (props.uin) subscribeLogs(props.uin)
   fetchInitialLogs()
-  setupSocket()
 })
 
 onUnmounted(() => {
-  if (socket) {
-    socket.emit('logs:unsubscribe', props.uin)
-    socket.disconnect()
-    socket = null
-  }
+  if (props.uin) unsubscribeLogs(props.uin)
+  offEvent('bot:log', onBotLog)
+  offEvent('logs:history', onLogsHistory)
 })
 </script>
 

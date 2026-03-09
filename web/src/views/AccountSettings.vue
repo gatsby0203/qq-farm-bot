@@ -41,6 +41,37 @@
           </el-select>
           <span class="unit">清空则自动选择</span>
         </el-form-item>
+        <el-form-item label="施肥模式">
+          <el-select v-model="fertilizerMode" style="width: 260px">
+            <el-option label="关闭" value="none" />
+            <el-option label="普通化肥" value="normal" />
+            <el-option label="有机化肥" value="organic" />
+            <el-option label="双肥模式(普通+有机)" value="both" />
+          </el-select>
+          <span class="unit">仅在“自动施肥”开启时生效</span>
+        </el-form-item>
+        <el-form-item label="多季补肥">
+          <el-switch v-model="fertilizerMultiSeason" active-text="开启" inactive-text="关闭" />
+          <div class="unit">收获后若同一地块进入下一季生长，自动再施肥</div>
+        </el-form-item>
+        <el-form-item label="施肥土地范围">
+          <el-select
+            v-model="fertilizerSoilTypes"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="留空=全部土地"
+            style="width: 380px"
+          >
+            <el-option
+              v-for="item in fertilizerSoilTypeOptions"
+              :key="item.value"
+              :value="item.value"
+              :label="item.label"
+            />
+          </el-select>
+          <div class="unit">可多选，限制自动施肥只作用于选中土地类型</div>
+        </el-form-item>
         <el-form-item label="偷取作物黑名单">
           <el-select
             v-model="stealBlacklist"
@@ -81,10 +112,52 @@
           </el-select>
           <div class="unit">多选，选中的好友农场将不会进入巡查(同时跳过除草/杀虫/浇水)</div>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+      </el-form>
+    </div>
+
+    <!-- 功能开关 -->
+    <div class="section-card">
+      <h3 class="section-title">功能开关</h3>
+      <div class="toggles-grid">
+        <div v-for="group in toggleGroups" :key="group.title" class="toggle-group">
+          <div class="toggle-group-title">{{ group.title }}</div>
+          <div v-for="item in group.items" :key="item.key" class="toggle-row">
+            <span class="toggle-label">{{ item.label }}</span>
+            <el-switch v-model="featureToggles[item.key]" size="small" />
+          </div>
+        </div>
+      </div>
+      <el-form label-width="120px" class="config-form compact-form">
+        <el-form-item label="土地升级目标">
+          <el-input-number
+            v-model="featureToggles.landUpgradeTarget"
+            :min="0"
+            :max="6"
+            :step="1"
+            :disabled="!featureToggles.autoLandUpgrade"
+          />
+          <span class="unit">0=不限制，1-6=升级到指定土地类型</span>
+        </el-form-item>
+        <el-form-item v-if="featureToggles.friendQuietEnabled" label="静默时段">
+          <el-input
+            v-model="featureToggles.friendQuietStart"
+            size="small"
+            style="width: 100px"
+            placeholder="23:00"
+          />
+          <span class="unit-inline">至</span>
+          <el-input
+            v-model="featureToggles.friendQuietEnd"
+            size="small"
+            style="width: 100px"
+            placeholder="07:00"
+          />
+          <span class="unit">格式 HH:mm</span>
         </el-form-item>
       </el-form>
+      <div class="save-row">
+        <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+      </div>
     </div>
 
     <!-- 种植效率排行 -->
@@ -153,7 +226,109 @@ const userLevel = ref(1)
 const fastHarvest = ref(false)
 const stealBlacklist = ref([])
 const friendBlacklist = ref([])
-const featureToggles = ref({})
+const fertilizerMode = ref('normal')
+const fertilizerMultiSeason = ref(false)
+const fertilizerSoilTypes = ref([])
+const defaultFeatureToggles = Object.freeze({
+  autoHarvest: true,
+  fastHarvest: false,
+  autoPlant: true,
+  autoFertilize: false,
+  autoWeed: true,
+  autoPest: true,
+  autoWater: true,
+  fertilizerMode: 'normal',
+  fertilizerMultiSeason: false,
+  fertilizerSoilTypes: [],
+  autoLandUnlock: true,
+  autoLandUpgrade: true,
+  landUpgradeTarget: 6,
+  friendVisit: true,
+  autoSteal: true,
+  skipStealRadish: true,
+  stealBlacklist: [],
+  friendBlacklist: [],
+  friendHelp: true,
+  friendPest: true,
+  helpEvenExpFull: true,
+  friendQuietEnabled: false,
+  friendQuietStart: '23:00',
+  friendQuietEnd: '07:00',
+  autoTask: true,
+  autoSell: true,
+  autoBuyFertilizer: false,
+  autoFreeGifts: true,
+  autoShareReward: true,
+  autoMonthCard: true,
+  autoEmailReward: true,
+  autoVipGift: true,
+  autoIllustrated: true,
+  autoFertilizerBuy: false,
+  autoFertilizerUse: false,
+})
+
+function normalizeFeatureToggles(raw = {}) {
+  return { ...defaultFeatureToggles, ...(raw || {}) }
+}
+
+const featureToggles = ref(normalizeFeatureToggles())
+const toggleGroups = [
+  {
+    title: '自己农场',
+    items: [
+      { key: 'autoHarvest', label: '自动收获' },
+      { key: 'autoPlant', label: '自动种植' },
+      { key: 'autoFertilize', label: '自动施肥' },
+      { key: 'autoWater', label: '自动浇水' },
+      { key: 'autoWeed', label: '自动除草' },
+      { key: 'autoPest', label: '自动除虫' },
+      { key: 'autoLandUnlock', label: '自动开地' },
+      { key: 'autoLandUpgrade', label: '自动升级土地' },
+    ],
+  },
+  {
+    title: '好友巡查',
+    items: [
+      { key: 'friendVisit', label: '启用好友巡查' },
+      { key: 'autoSteal', label: '自动偷菜' },
+      { key: 'skipStealRadish', label: '跳过白萝卜' },
+      { key: 'friendHelp', label: '好友帮忙' },
+      { key: 'friendPest', label: '好友除虫' },
+      { key: 'helpEvenExpFull', label: '经验满时仍帮忙' },
+      { key: 'friendQuietEnabled', label: '好友巡查静默时段' },
+    ],
+  },
+  {
+    title: '系统',
+    items: [
+      { key: 'autoTask', label: '自动任务' },
+      { key: 'autoSell', label: '自动出售' },
+      { key: 'autoBuyFertilizer', label: '自动购买化肥' },
+    ],
+  },
+  {
+    title: '每日奖励',
+    items: [
+      { key: 'autoFreeGifts', label: '免费礼包' },
+      { key: 'autoShareReward', label: '分享奖励' },
+      { key: 'autoMonthCard', label: '月卡奖励' },
+      { key: 'autoEmailReward', label: '邮件奖励' },
+      { key: 'autoVipGift', label: 'VIP礼包' },
+      { key: 'autoIllustrated', label: '图鉴奖励' },
+      { key: 'autoFertilizerBuy', label: '化肥购买奖励' },
+      { key: 'autoFertilizerUse', label: '化肥使用奖励' },
+    ],
+  },
+]
+const fertilizerSoilTypeOptions = [
+  { value: 0, label: '普通土地' },
+  { value: 1, label: '红土地' },
+  { value: 2, label: '黑土地' },
+  { value: 3, label: '金土地' },
+  { value: 4, label: '紫土地' },
+  { value: 5, label: '翡翠土地' },
+  { value: 6, label: '蓝宝石土地' },
+]
 
 const ranking = ref([])
 const rankingLoading = ref(false)
@@ -166,17 +341,28 @@ async function fetchConfig() {
   try {
     const res = await getAccountSnapshot(props.uin)
     const data = res.data
-    farmIntervalSec.value = Math.round((data.farmInterval || 1000) / 1000)
-    friendIntervalSec.value = Math.round((data.friendInterval || 10000) / 1000)
+    farmIntervalSec.value = Math.max(1, Math.round((data.farmInterval || 10000) / 1000))
+    friendIntervalSec.value = Math.max(1, Math.round((data.friendInterval || 10000) / 1000))
     userLevel.value = data.userState?.level || 1
     // 显式判断，保留 0 表示自动选择
-    preferredSeedId.value = data.preferredSeedId ?? 0
+    preferredSeedId.value = Number(data.preferredSeedId ?? 0) || 0
     
     // 加载黑名单
-    featureToggles.value = data.featureToggles || {}
-    fastHarvest.value = featureToggles.value.fastHarvest || false
-    stealBlacklist.value = featureToggles.value.stealBlacklist || []
-    friendBlacklist.value = featureToggles.value.friendBlacklist || []
+    featureToggles.value = normalizeFeatureToggles(data.featureToggles)
+    fastHarvest.value = !!featureToggles.value.fastHarvest
+    stealBlacklist.value = Array.isArray(featureToggles.value.stealBlacklist)
+      ? featureToggles.value.stealBlacklist.map(v => Number(v)).filter(v => Number.isFinite(v))
+      : []
+    friendBlacklist.value = Array.isArray(featureToggles.value.friendBlacklist)
+      ? featureToggles.value.friendBlacklist.map(v => Number(v)).filter(v => Number.isFinite(v))
+      : []
+    fertilizerMode.value = ['none', 'normal', 'organic', 'both'].includes(featureToggles.value.fertilizerMode)
+      ? featureToggles.value.fertilizerMode
+      : 'normal'
+    fertilizerMultiSeason.value = !!featureToggles.value.fertilizerMultiSeason
+    fertilizerSoilTypes.value = Array.isArray(featureToggles.value.fertilizerSoilTypes)
+      ? featureToggles.value.fertilizerSoilTypes.map(v => Number(v)).filter(v => Number.isFinite(v))
+      : []
   } catch (e) {
     console.error('获取配置失败:', e)
   }
@@ -191,13 +377,22 @@ async function saveConfig() {
       preferredSeedId: preferredSeedId.value || 0,
     })
     
-    // 保存黑名单到 featureToggles
-    await updateToggles(props.uin, {
+    const nextToggles = normalizeFeatureToggles({
       ...featureToggles.value,
       fastHarvest: fastHarvest.value,
-      stealBlacklist: stealBlacklist.value,
-      friendBlacklist: friendBlacklist.value
+      stealBlacklist: stealBlacklist.value.map(v => Number(v)).filter(v => Number.isFinite(v)),
+      friendBlacklist: friendBlacklist.value.map(v => Number(v)).filter(v => Number.isFinite(v)),
+      fertilizerMode: fertilizerMode.value,
+      fertilizerMultiSeason: fertilizerMultiSeason.value,
+      fertilizerSoilTypes: fertilizerSoilTypes.value.map(v => Number(v)).filter(v => Number.isFinite(v)),
+      landUpgradeTarget: Number.isFinite(Number(featureToggles.value.landUpgradeTarget))
+        ? Number(featureToggles.value.landUpgradeTarget)
+        : 6,
+      friendQuietStart: String(featureToggles.value.friendQuietStart || '23:00').trim() || '23:00',
+      friendQuietEnd: String(featureToggles.value.friendQuietEnd || '07:00').trim() || '07:00',
     })
+    await updateToggles(props.uin, nextToggles)
+    featureToggles.value = nextToggles
 
     ElMessage.success('配置已保存')
   } catch (e) {
@@ -301,6 +496,50 @@ onMounted(async () => {
   font-size: 13px;
 }
 
+.toggles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 20px;
+  margin-bottom: 8px;
+}
+
+.toggle-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--bg-base);
+}
+
+.toggle-group-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.toggle-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.save-row {
+  margin-top: 8px;
+}
+
+.unit-inline {
+  margin: 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .rank-star {
   color: var(--color-warning);
   font-weight: 700;
@@ -353,6 +592,10 @@ onMounted(async () => {
 
   .config-form :deep(.el-form-item) {
     margin-bottom: 12px;
+  }
+
+  .toggles-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

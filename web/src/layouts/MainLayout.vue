@@ -82,15 +82,6 @@
         </div>
         <div
           class="nav-item"
-          :class="{ active: route.name === 'AccountLogs', disabled: !currentUin }"
-          @click="currentUin && router.push(`/account/${currentUin}/logs`)"
-          title="日志"
-        >
-          <el-icon :size="22"><Document /></el-icon>
-          <span v-if="!sidebarCollapsed">日志</span>
-        </div>
-        <div
-          class="nav-item"
           :class="{ active: route.name === 'AccountStats', disabled: !currentUin }"
           @click="currentUin && router.push(`/account/${currentUin}/stats`)"
           title="统计"
@@ -216,9 +207,6 @@
         <div class="nav-item" :class="{ active: route.name === 'AccountSettings', disabled: !currentUin }" @click="currentUin && goMobile(`/account/${currentUin}/settings`)">
           <el-icon :size="22"><Setting /></el-icon><span>配置</span>
         </div>
-        <div class="nav-item" :class="{ active: route.name === 'AccountLogs', disabled: !currentUin }" @click="currentUin && goMobile(`/account/${currentUin}/logs`)">
-          <el-icon :size="22"><Document /></el-icon><span>日志</span>
-        </div>
         <div class="nav-item" :class="{ active: route.name === 'AccountStats', disabled: !currentUin }" @click="currentUin && goMobile(`/account/${currentUin}/stats`)">
           <el-icon :size="22"><DataLine /></el-icon><span>统计</span>
         </div>
@@ -265,7 +253,6 @@ const pageTitle = computed(() => {
     AccountHome: '首页',
     AccountLands: '土地状态',
     AccountSettings: '参数配置',
-    AccountLogs: '运行日志',
     AccountStats: '统计明细',
     AdminUsers: '用户管理',
     NotificationSettings: '推送设置',

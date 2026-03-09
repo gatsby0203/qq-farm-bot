@@ -346,6 +346,8 @@ router.get('/accounts/:uin/snapshot', canAccessUin, (req, res) => {
                     userId: user.uin, status: 'stopped',
                     platform: user.platform || 'qq',
                     userState: { name: user.nickname, level: user.level, gold: user.gold, exp: user.exp, gid: user.gid },
+                    farmInterval: user.farm_interval || 10000,
+                    friendInterval: user.friend_interval || 10000,
                     featureToggles: user.feature_toggles ? JSON.parse(user.feature_toggles) : null,
                     dailyStats: user.daily_stats ? JSON.parse(user.daily_stats) : null,
                     preferredSeedId: user.preferred_seed_id || 0,
@@ -361,10 +363,20 @@ router.get('/accounts/:uin/snapshot', canAccessUin, (req, res) => {
 /** PUT /api/accounts/:uin/toggles - 更新功能开关 */
 router.put('/accounts/:uin/toggles', canAccessUin, (req, res) => {
     try {
+        const user = db.getUserByUin(req.params.uin);
+        if (!user) return res.status(404).json({ ok: false, error: '账号不存在' });
+
+        const incoming = req.body || {};
         const bot = botManager.bots.get(req.params.uin);
-        if (!bot) return res.status(400).json({ ok: false, error: 'Bot 未运行' });
-        bot.setFeatureToggles(req.body || {});
-        res.json({ ok: true, data: bot.featureToggles });
+        if (bot) {
+            bot.setFeatureToggles(incoming);
+            return res.json({ ok: true, data: bot.featureToggles });
+        }
+
+        const current = user.feature_toggles ? JSON.parse(user.feature_toggles) : {};
+        const merged = { ...current, ...incoming };
+        db.updateUser(req.params.uin, { feature_toggles: JSON.stringify(merged) });
+        res.json({ ok: true, data: merged });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
     }
