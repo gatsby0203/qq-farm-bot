@@ -44,7 +44,11 @@ class BotManager extends EventEmitter {
                     errorMessage: snap.errorMessage,
                     platform: u.platform,
                     farmInterval: u.farm_interval,
+                    farmIntervalMin: u.farm_interval_min || u.farm_interval,
+                    farmIntervalMax: u.farm_interval_max || u.farm_interval,
                     friendInterval: u.friend_interval,
+                    friendIntervalMin: u.friend_interval_min || u.friend_interval,
+                    friendIntervalMax: u.friend_interval_max || u.friend_interval,
                     autoStart: !!u.auto_start,
                     startedAt: snap.startedAt,
                     uptime: snap.uptime,
@@ -62,7 +66,11 @@ class BotManager extends EventEmitter {
                 errorMessage: '',
                 platform: u.platform,
                 farmInterval: u.farm_interval,
+                farmIntervalMin: u.farm_interval_min || u.farm_interval,
+                farmIntervalMax: u.farm_interval_max || u.farm_interval,
                 friendInterval: u.friend_interval,
+                friendIntervalMin: u.friend_interval_min || u.friend_interval,
+                friendIntervalMax: u.friend_interval_max || u.friend_interval,
                 autoStart: !!u.auto_start,
                 startedAt: null,
                 uptime: 0,
@@ -97,7 +105,9 @@ class BotManager extends EventEmitter {
         const bot = new BotInstance(uin, {
             platform: opts.platform || 'qq',
             farmInterval: opts.farmInterval || CONFIG.farmCheckInterval,
+            farmIntervalRange: opts.farmIntervalRange || null,
             friendInterval: opts.friendInterval || CONFIG.friendCheckInterval,
+            friendIntervalRange: opts.friendIntervalRange || null,
             preferredSeedId: opts.preferredSeedId || 0,
             featureToggles: opts.featureToggles || null,
             dailyStats: opts.dailyStats || null,
@@ -214,7 +224,15 @@ class BotManager extends EventEmitter {
         await this._startBot(uin, code, {
             platform: user?.platform || 'qq',
             farmInterval: user?.farm_interval || 10000,
+            farmIntervalRange: {
+                min: user?.farm_interval_min || user?.farm_interval || 10000,
+                max: user?.farm_interval_max || user?.farm_interval || 10000,
+            },
             friendInterval: user?.friend_interval || 10000,
+            friendIntervalRange: {
+                min: user?.friend_interval_min || user?.friend_interval || 10000,
+                max: user?.friend_interval_max || user?.friend_interval || 10000,
+            },
             preferredSeedId: user?.preferred_seed_id || 0,
             featureToggles: user?.feature_toggles ? JSON.parse(user.feature_toggles) : null,
             dailyStats: user?.daily_stats ? JSON.parse(user.daily_stats) : null,
@@ -245,10 +263,44 @@ class BotManager extends EventEmitter {
     /**
      * 修改账号配置
      */
-    updateAccountConfig(uin, { farmInterval, friendInterval, autoStart, platform, preferredSeedId }) {
+    updateAccountConfig(
+        uin,
+        { farmInterval, friendInterval, farmIntervalMin, farmIntervalMax, friendIntervalMin, friendIntervalMax, autoStart, platform, preferredSeedId }
+    ) {
+        const normalizeRange = (minVal, maxVal, fallbackVal) => {
+            const rawFallback = Number.isFinite(Number(fallbackVal))
+                ? Number(fallbackVal)
+                : (Number.isFinite(Number(minVal)) ? Number(minVal) : (Number.isFinite(Number(maxVal)) ? Number(maxVal) : 10000));
+            const fallback = rawFallback;
+            const minRaw = minVal !== undefined ? Number(minVal) : fallback;
+            const maxRaw = maxVal !== undefined ? Number(maxVal) : fallback;
+            const clamp = (n) => Math.min(86400000, Math.max(0, Number.isFinite(n) ? Math.floor(n) : fallback));
+            const min = clamp(minRaw);
+            const max = clamp(maxRaw);
+            return min <= max ? { min, max } : { min: max, max: min };
+        };
+
+        // 兼容旧入参：单值时作为固定区间
+        const hasFarmRange = farmIntervalMin !== undefined || farmIntervalMax !== undefined || farmInterval !== undefined;
+        const hasFriendRange = friendIntervalMin !== undefined || friendIntervalMax !== undefined || friendInterval !== undefined;
+        const nextFarmRange = hasFarmRange
+            ? normalizeRange(farmIntervalMin, farmIntervalMax, farmInterval)
+            : null;
+        const nextFriendRange = hasFriendRange
+            ? normalizeRange(friendIntervalMin, friendIntervalMax, friendInterval)
+            : null;
+
         const updates = {};
-        if (farmInterval !== undefined) updates.farm_interval = farmInterval;
-        if (friendInterval !== undefined) updates.friend_interval = friendInterval;
+        if (nextFarmRange) {
+            updates.farm_interval = nextFarmRange.min;
+            updates.farm_interval_min = nextFarmRange.min;
+            updates.farm_interval_max = nextFarmRange.max;
+        }
+        if (nextFriendRange) {
+            updates.friend_interval = nextFriendRange.min;
+            updates.friend_interval_min = nextFriendRange.min;
+            updates.friend_interval_max = nextFriendRange.max;
+        }
         if (autoStart !== undefined) updates.auto_start = autoStart ? 1 : 0;
         if (platform !== undefined) updates.platform = platform;
         if (preferredSeedId !== undefined) updates.preferred_seed_id = preferredSeedId;
@@ -257,8 +309,12 @@ class BotManager extends EventEmitter {
         // 如果 Bot 正在运行，更新运行时配置
         const bot = this.bots.get(uin);
         if (bot) {
-            if (farmInterval !== undefined) bot.farmInterval = farmInterval;
-            if (friendInterval !== undefined) bot.friendInterval = friendInterval;
+            if (nextFarmRange || nextFriendRange) {
+                bot.setIntervalRanges(
+                    { farmIntervalRange: nextFarmRange || undefined, friendIntervalRange: nextFriendRange || undefined },
+                    { resetCountdown: true, reason: '巡查间隔更新' }
+                );
+            }
             if (preferredSeedId !== undefined) bot.setPreferredSeedId(preferredSeedId);
         }
     }
@@ -279,7 +335,15 @@ class BotManager extends EventEmitter {
                     this._startBot(user.uin, code, {
                         platform: user.platform,
                         farmInterval: user.farm_interval,
+                        farmIntervalRange: {
+                            min: user.farm_interval_min || user.farm_interval || 10000,
+                            max: user.farm_interval_max || user.farm_interval || 10000,
+                        },
                         friendInterval: user.friend_interval,
+                        friendIntervalRange: {
+                            min: user.friend_interval_min || user.friend_interval || 10000,
+                            max: user.friend_interval_max || user.friend_interval || 10000,
+                        },
                         preferredSeedId: user.preferred_seed_id || 0,
                         featureToggles: user.feature_toggles ? JSON.parse(user.feature_toggles) : null,
                         dailyStats: user.daily_stats ? JSON.parse(user.daily_stats) : null,

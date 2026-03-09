@@ -12,7 +12,7 @@ const EventEmitter = require('events');
 const WebSocket = require('ws');
 const { types } = require('../src/proto');
 const { CONFIG } = require('../src/config');
-const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById, getPlantExp } = require('../src/gameConfig');
+const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById, getPlantExp, getLevelExpProgress } = require('../src/gameConfig');
 const cryptoWasm = require('./utils/crypto-wasm');
 const fs = require('fs');
 const path = require('path');
@@ -88,6 +88,32 @@ function normalizeDateKey(input) {
 }
 
 const ORGANIC_FERTILIZER_ID = 1012;
+const MIN_INTERVAL_MS = 0;
+const MAX_INTERVAL_MS = 86400 * 1000;
+
+function clampIntervalMs(value, fallback = 10000) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return Math.min(MAX_INTERVAL_MS, Math.max(MIN_INTERVAL_MS, Math.floor(fallback)));
+    return Math.min(MAX_INTERVAL_MS, Math.max(MIN_INTERVAL_MS, Math.floor(n)));
+}
+
+function normalizeIntervalRange(rangeLike, fallbackMs = 10000) {
+    if (rangeLike && typeof rangeLike === 'object') {
+        const rawMin = rangeLike.min ?? rangeLike.minMs ?? fallbackMs;
+        const rawMax = rangeLike.max ?? rangeLike.maxMs ?? fallbackMs;
+        const min = clampIntervalMs(rawMin, fallbackMs);
+        const max = clampIntervalMs(rawMax, fallbackMs);
+        return min <= max ? { min, max } : { min: max, max: min };
+    }
+    const fixed = clampIntervalMs(rangeLike, fallbackMs);
+    return { min: fixed, max: fixed };
+}
+
+function rangeToText(range) {
+    if (!range) return '0s';
+    if (range.min === range.max) return `${Math.floor(range.min / 1000)}s`;
+    return `${Math.floor(range.min / 1000)}-${Math.floor(range.max / 1000)}s`;
+}
 
 // ============ BotInstance 类 ============
 
@@ -96,8 +122,16 @@ class BotInstance extends EventEmitter {
         super();
         this.userId = userId;
         this.platform = opts.platform || PLATFORMS.QQ;
-        this.farmInterval = opts.farmInterval || CONFIG.farmCheckInterval;
-        this.friendInterval = opts.friendInterval || CONFIG.friendCheckInterval;
+        this.farmIntervalRange = normalizeIntervalRange(
+            opts.farmIntervalRange || { min: opts.farmInterval, max: opts.farmInterval },
+            CONFIG.farmCheckInterval
+        );
+        this.friendIntervalRange = normalizeIntervalRange(
+            opts.friendIntervalRange || { min: opts.friendInterval, max: opts.friendInterval },
+            CONFIG.friendCheckInterval
+        );
+        this.farmInterval = this.farmIntervalRange.min;
+        this.friendInterval = this.friendIntervalRange.min;
         this.preferredSeedId = opts.preferredSeedId || 0;
 
         // ---------- 运行状态 ----------
@@ -117,6 +151,7 @@ class BotInstance extends EventEmitter {
         // ---------- 用户游戏状态 ----------
         this.userState = {
             gid: 0, name: '', level: 0, gold: 0, exp: 0,
+            coupon: 0,
             fertilizer: { normal: 0, organic: 0 },
             collectionPoints: { normal: 0, classic: 0 },
         };
@@ -126,11 +161,17 @@ class BotInstance extends EventEmitter {
         // ---------- 农场与好友循环 ----------
         this.farmLoopRunning = false;
         this.farmCheckTimer = null;
+        this.farmLoopTaskRunning = false;
+        this._farmDelayController = null;
+        this.nextFarmCheckAt = 0;
         this.isCheckingFarm = false;
         this.fastHarvestTimers = new Map();
 
         this.friendLoopRunning = false;
         this.friendCheckTimer = null;
+        this.friendLoopTaskRunning = false;
+        this._friendDelayController = null;
+        this.nextFriendCheckAt = 0;
         this.isCheckingFriends = false;
         this.operationLimits = new Map();
         this.expTracker = new Map();
@@ -421,6 +462,7 @@ class BotInstance extends EventEmitter {
                         this.userState.exp = count;
                     }
                     else if (id === 1 || id === 1001) { this.userState.gold = count; }
+                    else if (id === 1002) { this.userState.coupon = count; }
                 }
                 this._emitStateUpdate();
             } catch (e) { this.logWarn('Notify', `ItemNotify 错误: ${e.message}`); }
@@ -558,7 +600,7 @@ class BotInstance extends EventEmitter {
             this.ws.on('open', () => {
                 this.log('WS', '连接已建立，正在登录...');
                 this.sendLogin(async () => {
-                    this.log('系统', `农场巡查间隔: ${this.farmInterval}ms | 好友巡查间隔: ${this.friendInterval}ms`);
+                    this.log('系统', `农场巡查间隔: ${rangeToText(this.farmIntervalRange)} | 好友巡查间隔: ${rangeToText(this.friendIntervalRange)}`);
                     this.startFarmLoop();
                     this.startFriendLoop();
                     this._initTaskSystem();
@@ -1121,16 +1163,23 @@ class BotInstance extends EventEmitter {
     }
 
     async farmCheckLoop() {
+        if (this.farmLoopTaskRunning) return;
+        this.farmLoopTaskRunning = true;
         while (this.farmLoopRunning) {
             await this.checkFarm();
             if (!this.farmLoopRunning) break;
-            await sleep(this.farmInterval);
+            const delay = this._getRandomDelayMs(this.farmIntervalRange);
+            await this._waitLoopDelay('farm', delay);
         }
+        this.farmLoopTaskRunning = false;
+        this.nextFarmCheckAt = 0;
+        this._farmDelayController = null;
     }
 
     startFarmLoop() {
         if (this.farmLoopRunning) return;
         this.farmLoopRunning = true;
+        this.nextFarmCheckAt = Date.now() + 2000;
         this.farmCheckTimer = setTimeout(() => this.farmCheckLoop(), 2000);
     }
 
@@ -1150,8 +1199,12 @@ class BotInstance extends EventEmitter {
         this.log('系统', '⏸️ Bot 正在停止...');
         this.farmLoopRunning = false;
         this.friendLoopRunning = false;
+        this._cancelLoopDelay('farm');
+        this._cancelLoopDelay('friend');
         if (this.farmCheckTimer) { clearTimeout(this.farmCheckTimer); this.farmCheckTimer = null; }
         if (this.friendCheckTimer) { clearTimeout(this.friendCheckTimer); this.friendCheckTimer = null; }
+        this.nextFarmCheckAt = 0;
+        this.nextFriendCheckAt = 0;
         this._cleanup();
         if (this.ws) {
             try { this.ws.close(); } catch (e) { }
@@ -1180,15 +1233,98 @@ class BotInstance extends EventEmitter {
     _emitStateUpdate() {
         this.emit('stateUpdate', {
             userId: this.userId, status: this.status,
-            userState: { ...this.userState }, startedAt: this.startedAt,
+            userState: { ...this.userState },
+            startedAt: this.startedAt,
+            levelProgress: getLevelExpProgress(this.userState.level || 0, this.userState.exp || 0),
         });
+    }
+
+    _getRandomDelayMs(range) {
+        const normalized = normalizeIntervalRange(range, 10000);
+        if (normalized.max <= normalized.min) return normalized.min;
+        return normalized.min + Math.floor(Math.random() * (normalized.max - normalized.min + 1));
+    }
+
+    _waitLoopDelay(loopType, ms) {
+        const delayMs = clampIntervalMs(ms, 0);
+        const key = loopType === 'farm' ? '_farmDelayController' : '_friendDelayController';
+        const nextAtKey = loopType === 'farm' ? 'nextFarmCheckAt' : 'nextFriendCheckAt';
+        this[nextAtKey] = Date.now() + delayMs;
+
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                if (this[key] && this[key].timer === timer) this[key] = null;
+                this[nextAtKey] = 0;
+                resolve('timeout');
+            }, delayMs);
+            this[key] = { timer, resolve };
+        });
+    }
+
+    _cancelLoopDelay(loopType) {
+        const key = loopType === 'farm' ? '_farmDelayController' : '_friendDelayController';
+        const nextAtKey = loopType === 'farm' ? 'nextFarmCheckAt' : 'nextFriendCheckAt';
+        const controller = this[key];
+        if (!controller) return false;
+        clearTimeout(controller.timer);
+        this[key] = null;
+        this[nextAtKey] = 0;
+        try { controller.resolve('cancel'); } catch (e) { }
+        return true;
+    }
+
+    setIntervalRanges({ farmIntervalRange, friendIntervalRange } = {}, { resetCountdown = true, reason = '配置更新' } = {}) {
+        let changed = false;
+        if (farmIntervalRange) {
+            this.farmIntervalRange = normalizeIntervalRange(farmIntervalRange, this.farmIntervalRange.min);
+            this.farmInterval = this.farmIntervalRange.min;
+            changed = true;
+        }
+        if (friendIntervalRange) {
+            this.friendIntervalRange = normalizeIntervalRange(friendIntervalRange, this.friendIntervalRange.min);
+            this.friendInterval = this.friendIntervalRange.min;
+            changed = true;
+        }
+        if (!changed) return;
+
+        this.log('配置', `${reason}: 农场 ${rangeToText(this.farmIntervalRange)} | 好友 ${rangeToText(this.friendIntervalRange)}`);
+        if (resetCountdown) this.resetLoopCountdowns('保存配置后');
+    }
+
+    resetLoopCountdowns(reason = '') {
+        const reasonText = reason ? ` (${reason})` : '';
+        const farmCanceled = this._cancelLoopDelay('farm');
+        const friendCanceled = this._cancelLoopDelay('friend');
+
+        if (this.farmLoopRunning && !this.farmLoopTaskRunning) {
+            if (this.farmCheckTimer) clearTimeout(this.farmCheckTimer);
+            this.nextFarmCheckAt = Date.now();
+            this.farmCheckTimer = setTimeout(() => this.farmCheckLoop(), 0);
+        }
+        if (this.friendLoopRunning && !this.friendLoopTaskRunning) {
+            if (this.friendCheckTimer) clearTimeout(this.friendCheckTimer);
+            this.nextFriendCheckAt = Date.now();
+            this.friendCheckTimer = setTimeout(() => this.friendCheckLoop(), 0);
+        }
+        if (farmCanceled || friendCanceled) {
+            this.log('系统', `已重置巡查倒计时${reasonText}`);
+        }
     }
 
     getSnapshot() {
         return {
             userId: this.userId, status: this.status, errorMessage: this.errorMessage,
             platform: this.platform, userState: { ...this.userState },
+            levelProgress: getLevelExpProgress(this.userState.level || 0, this.userState.exp || 0),
             farmInterval: this.farmInterval, friendInterval: this.friendInterval,
+            farmIntervalMin: this.farmIntervalRange.min,
+            farmIntervalMax: this.farmIntervalRange.max,
+            friendIntervalMin: this.friendIntervalRange.min,
+            friendIntervalMax: this.friendIntervalRange.max,
+            nextFarmCheckAt: this.nextFarmCheckAt || 0,
+            nextFriendCheckAt: this.nextFriendCheckAt || 0,
+            isCheckingFarm: !!this.isCheckingFarm,
+            isCheckingFriends: !!this.isCheckingFriends,
             startedAt: this.startedAt, uptime: this.startedAt ? Date.now() - this.startedAt : 0,
             featureToggles: { ...this.featureToggles }, dailyStats: { ...this.dailyStats },
             preferredSeedId: this.preferredSeedId,

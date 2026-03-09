@@ -1,75 +1,103 @@
 <template>
   <div class="account-home" v-loading="loading">
-    <!-- 用户信息卡片 -->
     <div class="user-profile-card">
-      <img class="profile-avatar" :src="`https://q.qlogo.cn/headimg_dl?dst_uin=${uin}&spec=640&img_type=jpg`" :alt="uin" />
-      <div class="profile-info">
-        <div class="profile-name">{{ snapshot?.userState?.name || '-' }}</div>
-        <div class="profile-uin">QQ: {{ uin }}</div>
+      <div class="profile-main">
+        <img class="profile-avatar" :src="`https://q.qlogo.cn/headimg_dl?dst_uin=${uin}&spec=640&img_type=jpg`" :alt="uin" />
+        <div class="profile-info">
+          <div class="profile-name">{{ snapshot?.userState?.name || '-' }}</div>
+          <div class="profile-uin">账号: {{ uin }}</div>
+        </div>
       </div>
-    </div>
-    <div class="info-grid">
-      <div class="info-card">
-        <div class="info-label">等级</div>
-        <div class="info-value level">Lv{{ snapshot?.userState?.level || 0 }}</div>
-      </div>
-      <div class="info-card">
-        <div class="info-label">金币</div>
-        <div class="info-value gold">{{ formatNum(snapshot?.userState?.gold) }}</div>
-      </div>
-      <div class="info-card">
-        <div class="info-label">经验</div>
-        <div class="info-value">{{ formatNum(snapshot?.userState?.exp) }}</div>
+      <div class="profile-actions">
+        <el-tag :type="isRunning ? 'success' : 'danger'" effect="dark" size="small" round>
+          {{ isRunning ? '已连接' : '未连接' }}
+        </el-tag>
+        <el-button v-if="!isRunning" type="primary" size="small" @click="handleStart">启动Bot</el-button>
+        <el-button v-else type="warning" size="small" @click="handleStop">停止Bot</el-button>
+        <span v-if="isRunning && uptime > 0" class="uptime-text">在线时长 {{ formatUptime(uptime) }}</span>
       </div>
     </div>
 
-    <!-- 额外数据 (化肥/收藏点) -->
-    <div class="extra-data-grid" v-if="snapshot?.userState?.fertilizer">
-      <div class="extra-card">
-        <div class="extra-card-header">
-          <el-icon><Pouring /></el-icon> 化肥容器
+    <div class="metrics-grid" v-if="snapshot?.userState">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">等级</span>
+          <span class="metric-value level">Lv{{ userState.level || 0 }}</span>
         </div>
-        <div class="extra-card-body">
-          <div class="extra-item">
-            <div class="extra-label">普通</div>
-            <div class="extra-value">{{ (snapshot.userState.fertilizer.normal / 3600).toFixed(1) }}h</div>
+        <div class="exp-progress-header">
+          <span>经验进度</span>
+          <span>{{ formatNum(levelProgress.current) }} / {{ formatNum(levelProgress.needed) }}</span>
+        </div>
+        <div class="exp-progress-track">
+          <div class="exp-progress-bar" :style="{ width: `${expProgressPercent}%` }" />
+        </div>
+        <div class="exp-progress-foot">
+          <span class="exp-today">今日 +{{ formatNum(todayExpGainLocal) }}</span>
+          <span class="exp-history">累计 {{ formatNum(expBeforeToday) }}</span>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-title">金币 / 点券</div>
+        <div class="asset-grid">
+          <div class="asset-cell">
+            <div class="asset-label">金币</div>
+            <div class="metric-value gold">{{ formatNum(userState.gold) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.gold)">
+              {{ formatSigned(dailyDelta.gold) }}
+            </div>
           </div>
-          <div class="extra-item">
-            <div class="extra-label">有机</div>
-            <div class="extra-value organic">{{ (snapshot.userState.fertilizer.organic / 3600).toFixed(1) }}h</div>
+          <div class="asset-cell">
+            <div class="asset-label">点券</div>
+            <div class="metric-value coupon">{{ formatNum(userState.coupon) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.coupon)">
+              {{ formatSigned(dailyDelta.coupon) }}
+            </div>
           </div>
         </div>
       </div>
-      <div class="extra-card">
-        <div class="extra-card-header">
-          <el-icon><CollectionTag /></el-icon> 收藏点
-        </div>
-        <div class="extra-card-body">
-          <div class="extra-item">
-            <div class="extra-label">普通</div>
-            <div class="extra-value">{{ snapshot.userState.collectionPoints?.normal || 0 }}</div>
+
+      <div class="metric-card">
+        <div class="metric-title">化肥</div>
+        <div class="asset-grid">
+          <div class="asset-cell">
+            <div class="asset-label">普通</div>
+            <div class="metric-value">{{ formatHours(userState.fertilizer?.normal) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.fertilizerNormal)">
+              {{ formatSignedHours(dailyDelta.fertilizerNormal) }}
+            </div>
           </div>
-          <div class="extra-item">
-            <div class="extra-label">典藏</div>
-            <div class="extra-value classic">{{ snapshot.userState.collectionPoints?.classic || 0 }}</div>
+          <div class="asset-cell">
+            <div class="asset-label">有机</div>
+            <div class="metric-value">{{ formatHours(userState.fertilizer?.organic) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.fertilizerOrganic)">
+              {{ formatSignedHours(dailyDelta.fertilizerOrganic) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-title">收藏点</div>
+        <div class="asset-grid">
+          <div class="asset-cell">
+            <div class="asset-label">普通</div>
+            <div class="metric-value">{{ formatNum(userState.collectionPoints?.normal) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.collectionNormal)">
+              {{ formatSigned(dailyDelta.collectionNormal) }}
+            </div>
+          </div>
+          <div class="asset-cell">
+            <div class="asset-label">典藏</div>
+            <div class="metric-value">{{ formatNum(userState.collectionPoints?.classic) }}</div>
+            <div class="metric-delta" :class="getDeltaClass(dailyDelta.collectionClassic)">
+              {{ formatSigned(dailyDelta.collectionClassic) }}
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 连接状态 -->
-    <div class="status-bar">
-      <el-tag :type="snapshot?.status === 'running' ? 'success' : 'danger'" effect="dark" size="small" round>
-        {{ snapshot?.status === 'running' ? '已连接' : '未连接' }}
-      </el-tag>
-      <el-button v-if="snapshot?.status !== 'running'" type="primary" size="small" @click="handleStart">启动Bot</el-button>
-      <el-button v-else type="warning" size="small" @click="handleStop">停止Bot</el-button>
-      <span v-if="snapshot?.status === 'running' && uptime" class="uptime-text">
-        ⭐ 挂机时长: {{ formatUptime(uptime) }}
-      </span>
-    </div>
-
-    <!-- 今日统计 -->
     <div class="section-card" v-if="stats">
       <div class="section-header">
         <h3 class="section-title">今日统计</h3>
@@ -121,7 +149,22 @@
       </div>
     </div>
 
-    <!-- 运行日志（已合并到首页） -->
+    <div class="section-card countdown-card">
+      <div class="section-header">
+        <h3 class="section-title">下一次巡查剩余时间</h3>
+      </div>
+      <div class="countdown-grid">
+        <div class="countdown-item">
+          <div class="countdown-label">农场巡查</div>
+          <div class="countdown-value">{{ nextFarmCheckText }}</div>
+        </div>
+        <div class="countdown-item">
+          <div class="countdown-label">好友巡查</div>
+          <div class="countdown-value">{{ nextFriendCheckText }}</div>
+        </div>
+      </div>
+    </div>
+
     <AccountLogs :uin="props.uin" />
 
     <div v-if="!snapshot && !loading" class="empty-state">
@@ -146,14 +189,22 @@ import { onEvent, offEvent } from '../socket/index.js'
 import AccountLoginDialog from '../components/AccountLoginDialog.vue'
 import AccountLogs from './AccountLogs.vue'
 
+const DAILY_BASELINE_PREFIX = 'qqfarm:daily-metrics-base'
+
 const props = defineProps({ uin: String })
+const uin = computed(() => props.uin || '')
 
 const loading = ref(false)
 const snapshot = ref(null)
 const stats = ref(null)
 const uptime = ref(0)
+const nowTs = ref(Date.now())
+const dailyBaseline = ref(null)
+const dailyBaselineDate = ref('')
+
 let uptimeTimer = null
-let timer = null
+let refreshTimer = null
+let countdownTimer = null
 
 const loginDialogVisible = ref(false)
 const initialPlatform = computed(() => {
@@ -163,21 +214,148 @@ const initialPlatform = computed(() => {
   return props.uin?.startsWith('wx_') ? 'wx' : 'qq'
 })
 
+const userState = computed(() => snapshot.value?.userState || {})
+const isRunning = computed(() => snapshot.value?.status === 'running')
+
+const levelProgress = computed(() => {
+  const progress = snapshot.value?.levelProgress || {}
+  return {
+    current: Number(progress.current || 0),
+    needed: Number(progress.needed || 0),
+  }
+})
+
+const expProgressPercent = computed(() => {
+  const needed = levelProgress.value.needed
+  if (!needed) return 0
+  return Math.max(0, Math.min(100, (levelProgress.value.current / needed) * 100))
+})
+
+const dailyDelta = computed(() => {
+  const cur = getCurrentMetrics(snapshot.value)
+  const base = dailyBaseline.value || cur
+  return {
+    gold: cur.gold - base.gold,
+    coupon: cur.coupon - base.coupon,
+    exp: cur.exp - base.exp,
+    fertilizerNormal: cur.fertilizerNormal - base.fertilizerNormal,
+    fertilizerOrganic: cur.fertilizerOrganic - base.fertilizerOrganic,
+    collectionNormal: cur.collectionNormal - base.collectionNormal,
+    collectionClassic: cur.collectionClassic - base.collectionClassic,
+  }
+})
+
+const todayExpGainLocal = computed(() => Math.max(0, dailyDelta.value.exp || 0))
+const expBeforeToday = computed(() => {
+  const totalExp = Number(userState.value.exp || 0)
+  return Math.max(0, totalExp - todayExpGainLocal.value)
+})
+
+const nextFarmCheckText = computed(() => buildNextCheckText('farm'))
+const nextFriendCheckText = computed(() => buildNextCheckText('friend'))
+
+function getBeijingDateKey(ts = Date.now()) {
+  const bjMs = ts + 8 * 3600 * 1000
+  const d = new Date(bjMs)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getBaselineStorageKey(uin, date) {
+  return `${DAILY_BASELINE_PREFIX}:${uin}:${date}`
+}
+
+function toNumber(v, fallback = 0) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function getCurrentMetrics(data) {
+  const state = data?.userState || {}
+  const fertilizer = state.fertilizer || {}
+  const collection = state.collectionPoints || {}
+  return {
+    gold: toNumber(state.gold),
+    coupon: toNumber(state.coupon),
+    exp: toNumber(state.exp),
+    fertilizerNormal: toNumber(fertilizer.normal),
+    fertilizerOrganic: toNumber(fertilizer.organic),
+    collectionNormal: toNumber(collection.normal),
+    collectionClassic: toNumber(collection.classic),
+  }
+}
+
+function loadDailyBaseline(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveDailyBaseline(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function syncDailyBaseline() {
+  if (!props.uin || !snapshot.value?.userState) return
+
+  const date = getBeijingDateKey()
+  const key = getBaselineStorageKey(props.uin, date)
+  const current = getCurrentMetrics(snapshot.value)
+  const loaded = loadDailyBaseline(key)
+
+  const baseline = {
+    gold: toNumber(loaded?.gold, current.gold),
+    coupon: toNumber(loaded?.coupon, current.coupon),
+    exp: toNumber(loaded?.exp, current.exp),
+    fertilizerNormal: toNumber(loaded?.fertilizerNormal, current.fertilizerNormal),
+    fertilizerOrganic: toNumber(loaded?.fertilizerOrganic, current.fertilizerOrganic),
+    collectionNormal: toNumber(loaded?.collectionNormal, current.collectionNormal),
+    collectionClassic: toNumber(loaded?.collectionClassic, current.collectionClassic),
+  }
+
+  if (!loaded) {
+    saveDailyBaseline(key, baseline)
+  }
+
+  dailyBaseline.value = baseline
+  dailyBaselineDate.value = date
+}
+
+function applySnapshot(data) {
+  snapshot.value = data
+  stats.value = data?.dailyStats || null
+
+  if (data?.startedAt) {
+    uptime.value = Date.now() - data.startedAt
+    startUptimeTimer(data.startedAt)
+  } else {
+    uptime.value = 0
+    stopUptimeTimer()
+  }
+
+  syncDailyBaseline()
+}
+
 async function fetchData() {
   loading.value = true
   try {
     const res = await getAccountSnapshot(props.uin)
-    snapshot.value = res.data
-    stats.value = res.data.dailyStats || null
-    // 初始化挂机时长
-    if (res.data.startedAt) {
-      uptime.value = Date.now() - res.data.startedAt
-      startUptimeTimer(res.data.startedAt)
-    } else {
-      uptime.value = 0
-      stopUptimeTimer()
-    }
-  } catch { /* */ } finally {
+    applySnapshot(res.data)
+  } catch {
+    // ignore fetch failure to avoid interrupting UI
+  } finally {
     loading.value = false
   }
 }
@@ -197,7 +375,6 @@ function stopUptimeTimer() {
 }
 
 async function handleStart() {
-  // 无法复用 Session，点击启动直接弹出 Code 登录框
   loginDialogVisible.value = true
 }
 
@@ -207,6 +384,10 @@ async function handleLoginConfirm(form) {
       code: form.code,
       uin: form.uin,
       platform: form.platform,
+      farmIntervalMin: form.farmIntervalMin,
+      farmIntervalMax: form.farmIntervalMax,
+      friendIntervalMin: form.friendIntervalMin,
+      friendIntervalMax: form.friendIntervalMax,
       farmInterval: form.farmInterval,
       friendInterval: form.friendInterval,
     })
@@ -223,11 +404,44 @@ function handleDialogCancel() {
 }
 
 async function handleStop() {
-  try { await stopBot(props.uin); ElMessage.success('已停止'); fetchData() }
-  catch (e) { ElMessage.error(e.message) }
+  try {
+    await stopBot(props.uin)
+    ElMessage.success('已停止')
+    fetchData()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
-function formatNum(n) { return n ? Number(n).toLocaleString() : '0' }
+function formatNum(n) {
+  return Number(toNumber(n)).toLocaleString()
+}
+
+function formatHours(sec) {
+  return `${(toNumber(sec) / 3600).toFixed(1)}h`
+}
+
+function formatSigned(n) {
+  const num = toNumber(n)
+  if (num > 0) return `+${formatNum(num)}`
+  if (num < 0) return `-${formatNum(Math.abs(num))}`
+  return '0'
+}
+
+function formatSignedHours(sec) {
+  const num = toNumber(sec)
+  const hours = (Math.abs(num) / 3600).toFixed(1)
+  if (num > 0) return `+${hours}h`
+  if (num < 0) return `-${hours}h`
+  return '0.0h'
+}
+
+function getDeltaClass(val) {
+  const num = toNumber(val)
+  if (num > 0) return 'delta-positive'
+  if (num < 0) return 'delta-negative'
+  return 'delta-neutral'
+}
 
 function formatUptime(ms) {
   if (!ms || ms <= 0) return '0秒'
@@ -244,31 +458,75 @@ function formatUptime(ms) {
   return parts.join('')
 }
 
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '00:00:00'
+  const totalSecs = Math.floor(ms / 1000)
+  const days = Math.floor(totalSecs / 86400)
+  const hours = Math.floor((totalSecs % 86400) / 3600)
+  const mins = Math.floor((totalSecs % 3600) / 60)
+  const secs = totalSecs % 60
+  const pad = (v) => String(v).padStart(2, '0')
+  if (days > 0) return `${days}天 ${pad(hours)}:${pad(mins)}:${pad(secs)}`
+  return `${pad(hours)}:${pad(mins)}:${pad(secs)}`
+}
+
+function buildNextCheckText(type) {
+  if (!snapshot.value || snapshot.value.status !== 'running') return '账号未登录'
+
+  if (type === 'farm' && snapshot.value.isCheckingFarm) return '巡查中...'
+  if (type === 'friend' && snapshot.value.isCheckingFriends) return '巡查中...'
+
+  const nextAt = type === 'farm'
+    ? toNumber(snapshot.value.nextFarmCheckAt)
+    : toNumber(snapshot.value.nextFriendCheckAt)
+
+  if (!nextAt || nextAt <= 0) return '等待巡查...'
+
+  const remainMs = nextAt - nowTs.value
+  if (remainMs <= 0) return '等待巡查...'
+  return formatDuration(remainMs)
+}
+
 function onStateUpdate(data) {
   if (data.userId !== props.uin) return
-  if (snapshot.value) {
-    snapshot.value.status = data.status
-    snapshot.value.userState = data.userState
-    // 更新挂机时长
-    if (data.startedAt) {
-      uptime.value = Date.now() - data.startedAt
-      startUptimeTimer(data.startedAt)
-    } else if (data.status !== 'running') {
-      uptime.value = 0
-      stopUptimeTimer()
-    }
+  if (!snapshot.value) return
+
+  snapshot.value = {
+    ...snapshot.value,
+    status: data.status,
+    userState: data.userState,
+    startedAt: data.startedAt,
+    levelProgress: data.levelProgress || snapshot.value.levelProgress,
   }
+
+  if (data.startedAt) {
+    uptime.value = Date.now() - data.startedAt
+    startUptimeTimer(data.startedAt)
+  } else if (data.status !== 'running') {
+    uptime.value = 0
+    stopUptimeTimer()
+  }
+
+  syncDailyBaseline()
 }
 
 onMounted(() => {
   fetchData()
-  timer = setInterval(fetchData, 5000)
+  refreshTimer = setInterval(fetchData, 5000)
+  countdownTimer = setInterval(() => {
+    nowTs.value = Date.now()
+    if (dailyBaselineDate.value && dailyBaselineDate.value !== getBeijingDateKey()) {
+      syncDailyBaseline()
+    }
+  }, 1000)
   onEvent('bot:stateUpdate', onStateUpdate)
 })
+
 onUnmounted(() => {
   offEvent('bot:stateUpdate', onStateUpdate)
   stopUptimeTimer()
-  if (timer) clearInterval(timer)
+  if (refreshTimer) clearInterval(refreshTimer)
+  if (countdownTimer) clearInterval(countdownTimer)
 })
 </script>
 
@@ -276,25 +534,27 @@ onUnmounted(() => {
 .user-profile-card {
   background: var(--bg-surface);
   border-radius: 16px;
-  padding: 32px;
+  padding: 24px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: space-between;
+  gap: 20px;
   margin-bottom: 24px;
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.user-profile-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+
+.profile-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .profile-avatar {
-  width: 88px;
-  height: 88px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  border: 4px solid var(--bg-base);
+  border: 3px solid var(--bg-base);
   box-shadow: var(--shadow);
   object-fit: cover;
   background: var(--bg-hover);
@@ -313,61 +573,140 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.info-card {
-  background: var(--bg-surface);
-  border-radius: 12px;
-  padding: 20px 16px;
-  text-align: center;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-  transition: transform 0.2s;
-}
-.info-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.info-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.info-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.info-value.gold { color: var(--color-warning); }
-.info-value.level { color: var(--color-success); }
-.info-value.name { font-size: 18px; }
-
-.status-bar {
-  background: var(--bg-surface);
-  border-radius: 12px;
-  padding: 20px;
+.profile-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .uptime-text {
-  font-size: 13px;
   color: var(--color-success);
-  font-weight: 500;
-  margin-left: auto;
-  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.metric-card {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.metric-title {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.metric-value.level {
+  color: var(--color-success);
+}
+
+.metric-value.gold {
+  color: var(--color-warning);
+}
+
+.metric-value.coupon {
+  color: var(--color-primary);
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.asset-cell {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-base);
+}
+
+.asset-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.metric-delta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.delta-positive {
+  color: var(--color-success);
+}
+
+.delta-negative {
+  color: var(--color-danger);
+}
+
+.delta-neutral {
+  color: var(--text-muted);
+}
+
+.exp-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.exp-progress-track {
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.exp-progress-bar {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
+.exp-progress-foot {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.exp-today {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.exp-history {
+  color: #3b82f6;
+  font-weight: 600;
 }
 
 .section-card {
@@ -390,11 +729,7 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 16px;
-}
-
-.section-header .section-title {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .section-date {
@@ -402,10 +737,9 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-/* 今日统计 */
 .stats-detail-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -430,72 +764,34 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
-/* 额外数据 (化肥/收藏点) */
-.extra-data-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.extra-card {
-  background: var(--bg-surface);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-  transition: transform 0.2s;
-}
-.extra-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.extra-card-header {
-  font-size: 13px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.countdown-card .section-header {
   margin-bottom: 12px;
-  font-weight: 500;
 }
 
-.extra-card-header .el-icon {
-  font-size: 16px;
-  color: var(--color-primary);
+.countdown-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.extra-card-body {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
+.countdown-item {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-base);
 }
 
-.extra-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.extra-label {
-  font-size: 12px;
+.countdown-label {
   color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 
-.extra-value {
-  font-size: 18px;
+.countdown-value {
+  font-size: 20px;
   font-weight: 700;
-  color: var(--color-primary);
-}
-
-.extra-value.organic {
-  color: var(--color-success);
-}
-
-.extra-value.classic {
-  color: var(--color-warning);
+  color: var(--text);
+  line-height: 1.2;
 }
 
 .empty-state {
@@ -503,33 +799,54 @@ onUnmounted(() => {
   text-align: center;
 }
 
+@media (max-width: 1024px) {
+  .stats-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .user-profile-card {
     padding: 14px;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .profile-avatar {
-    width: 48px;
-    height: 48px;
+    width: 54px;
+    height: 54px;
   }
 
   .profile-name {
     font-size: 17px;
   }
 
-  .info-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .info-value {
+  .metric-card {
+    padding: 12px;
+  }
+
+  .metric-value {
     font-size: 18px;
   }
 
+  .countdown-grid,
   .stats-detail-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .countdown-value {
+    font-size: 16px;
   }
 
   .section-card {
@@ -537,4 +854,12 @@ onUnmounted(() => {
   }
 }
 
+@media (max-width: 520px) {
+  .metrics-grid,
+  .asset-grid,
+  .countdown-grid,
+  .stats-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

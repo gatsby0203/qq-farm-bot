@@ -9,12 +9,16 @@
           <div class="unit">开启后，作物成熟瞬间立即执行收获请求(误差<200ms)，效率最高。</div>
         </el-form-item>
         <el-form-item label="农场巡查间隔">
-          <el-input-number v-model="farmIntervalSec" :min="1" :max="3600" :step="1" />
-          <span class="unit">秒 (最低1秒)</span>
+          <el-input-number v-model="farmIntervalMinSec" :min="0" :max="86400" :step="1" />
+          <span class="unit-inline">~</span>
+          <el-input-number v-model="farmIntervalMaxSec" :min="0" :max="86400" :step="1" />
+          <span class="unit">秒 (0-86400)</span>
         </el-form-item>
         <el-form-item label="好友巡查间隔">
-          <el-input-number v-model="friendIntervalSec" :min="1" :max="3600" :step="1" />
-          <span class="unit">秒 (最低1秒)</span>
+          <el-input-number v-model="friendIntervalMinSec" :min="0" :max="86400" :step="1" />
+          <span class="unit-inline">~</span>
+          <el-input-number v-model="friendIntervalMaxSec" :min="0" :max="86400" :step="1" />
+          <span class="unit">秒 (0-86400)</span>
         </el-form-item>
         <el-form-item label="指定种植作物">
           <el-select
@@ -218,8 +222,10 @@ import { getAccountSnapshot, updateAccountConfig, getPlantRanking, getCropList, 
 
 const props = defineProps({ uin: String })
 
-const farmIntervalSec = ref(1)
-const friendIntervalSec = ref(10)
+const farmIntervalMinSec = ref(10)
+const farmIntervalMaxSec = ref(10)
+const friendIntervalMinSec = ref(10)
+const friendIntervalMaxSec = ref(10)
 const preferredSeedId = ref(29999)  // 29999 = 白萝卜仙人
 const saving = ref(false)
 const userLevel = ref(1)
@@ -341,8 +347,19 @@ async function fetchConfig() {
   try {
     const res = await getAccountSnapshot(props.uin)
     const data = res.data
-    farmIntervalSec.value = Math.max(1, Math.round((data.farmInterval || 10000) / 1000))
-    friendIntervalSec.value = Math.max(1, Math.round((data.friendInterval || 10000) / 1000))
+    const farmRangeSec = normalizeIntervalRangeSec(
+      data.farmIntervalMin ?? data.farmInterval,
+      data.farmIntervalMax ?? data.farmInterval,
+    )
+    farmIntervalMinSec.value = farmRangeSec.min
+    farmIntervalMaxSec.value = farmRangeSec.max
+
+    const friendRangeSec = normalizeIntervalRangeSec(
+      data.friendIntervalMin ?? data.friendInterval,
+      data.friendIntervalMax ?? data.friendInterval,
+    )
+    friendIntervalMinSec.value = friendRangeSec.min
+    friendIntervalMaxSec.value = friendRangeSec.max
     userLevel.value = data.userState?.level || 1
     // 显式判断，保留 0 表示自动选择
     preferredSeedId.value = Number(data.preferredSeedId ?? 0) || 0
@@ -371,9 +388,18 @@ async function fetchConfig() {
 async function saveConfig() {
   saving.value = true
   try {
+    const farmRangeSec = normalizeIntervalRangeSec(farmIntervalMinSec.value, farmIntervalMaxSec.value)
+    const friendRangeSec = normalizeIntervalRangeSec(friendIntervalMinSec.value, friendIntervalMaxSec.value)
+    farmIntervalMinSec.value = farmRangeSec.min
+    farmIntervalMaxSec.value = farmRangeSec.max
+    friendIntervalMinSec.value = friendRangeSec.min
+    friendIntervalMaxSec.value = friendRangeSec.max
+
     await updateAccountConfig(props.uin, {
-      farmInterval: farmIntervalSec.value * 1000,
-      friendInterval: friendIntervalSec.value * 1000,
+      farmIntervalMin: farmRangeSec.min * 1000,
+      farmIntervalMax: farmRangeSec.max * 1000,
+      friendIntervalMin: friendRangeSec.min * 1000,
+      friendIntervalMax: friendRangeSec.max * 1000,
       preferredSeedId: preferredSeedId.value || 0,
     })
     
@@ -441,6 +467,17 @@ function formatGrowTime(sec) {
   return m > 0 ? `${h}小时${m}分` : `${h}小时`
 }
 
+function normalizeIntervalRangeSec(minVal, maxVal) {
+  const clamp = (v, fallback = 10) => {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return Math.min(86400, Math.max(0, Math.floor(fallback)))
+    return Math.min(86400, Math.max(0, Math.floor(n)))
+  }
+  const min = clamp(minVal)
+  const max = clamp(maxVal, min)
+  return min <= max ? { min, max } : { min: max, max: min }
+}
+
 onMounted(async () => {
   await fetchConfig()
   fetchRanking()
@@ -496,6 +533,12 @@ onMounted(async () => {
   font-size: 13px;
 }
 
+.unit-inline {
+  margin: 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .toggles-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -534,11 +577,6 @@ onMounted(async () => {
   margin-top: 8px;
 }
 
-.unit-inline {
-  margin: 0 8px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
 
 .rank-star {
   color: var(--color-warning);

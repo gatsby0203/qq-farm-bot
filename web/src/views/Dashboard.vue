@@ -130,6 +130,10 @@ async function handleLoginConfirm(form) {
       code: form.code,
       uin: form.uin,
       platform: form.platform,
+      farmIntervalMin: form.farmIntervalMin,
+      farmIntervalMax: form.farmIntervalMax,
+      friendIntervalMin: form.friendIntervalMin,
+      friendIntervalMax: form.friendIntervalMax,
       farmInterval: form.farmInterval,
       friendInterval: form.friendInterval,
     })

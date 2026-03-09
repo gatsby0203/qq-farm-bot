@@ -107,7 +107,11 @@ async function initDatabase() {
             session_data TEXT DEFAULT '',
             platform TEXT DEFAULT 'qq',
             farm_interval INTEGER DEFAULT 10000,
+            farm_interval_min INTEGER DEFAULT 10000,
+            farm_interval_max INTEGER DEFAULT 10000,
             friend_interval INTEGER DEFAULT 10000,
+            friend_interval_min INTEGER DEFAULT 10000,
+            friend_interval_max INTEGER DEFAULT 10000,
             auto_start INTEGER DEFAULT 0,
             feature_toggles TEXT DEFAULT '',
             daily_stats TEXT DEFAULT '',
@@ -204,6 +208,26 @@ async function initDatabase() {
 
     // 迁移: 添加 preferred_seed_id 列
     try { db.run(`ALTER TABLE users ADD COLUMN preferred_seed_id INTEGER DEFAULT 0`); } catch (e) { /* 列已存在 */ }
+    try { db.run(`ALTER TABLE users ADD COLUMN farm_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.run(`ALTER TABLE users ADD COLUMN farm_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.run(`ALTER TABLE users ADD COLUMN friend_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.run(`ALTER TABLE users ADD COLUMN friend_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
+    try {
+        db.run(`
+            UPDATE users
+            SET farm_interval_min = COALESCE(farm_interval, 10000),
+                farm_interval_max = COALESCE(farm_interval, 10000)
+            WHERE farm_interval_min = 10000 AND farm_interval_max = 10000
+        `);
+    } catch (e) { }
+    try {
+        db.run(`
+            UPDATE users
+            SET friend_interval_min = COALESCE(friend_interval, 10000),
+                friend_interval_max = COALESCE(friend_interval, 10000)
+            WHERE friend_interval_min = 10000 AND friend_interval_max = 10000
+        `);
+    } catch (e) { }
 
     // 迁移: 添加持久化配置与统计列
     try { db.run(`ALTER TABLE users ADD COLUMN feature_toggles TEXT DEFAULT ''`); } catch (e) { }
@@ -233,9 +257,30 @@ function getUserById(id) {
     return queryOne('SELECT * FROM users WHERE id = ?', [id]);
 }
 
-function createUser({ uin, nickname = '', platform = 'qq', farmInterval = 10000, friendInterval = 10000 }) {
-    run(`INSERT INTO users (uin, nickname, platform, farm_interval, friend_interval) VALUES (?, ?, ?, ?, ?)`,
-        [uin, nickname, platform, farmInterval, friendInterval]);
+function createUser({
+    uin,
+    nickname = '',
+    platform = 'qq',
+    farmInterval = 10000,
+    friendInterval = 10000,
+    farmIntervalMin = null,
+    farmIntervalMax = null,
+    friendIntervalMin = null,
+    friendIntervalMax = null,
+}) {
+    const farmMin = farmIntervalMin == null ? farmInterval : farmIntervalMin;
+    const farmMax = farmIntervalMax == null ? farmInterval : farmIntervalMax;
+    const friendMin = friendIntervalMin == null ? friendInterval : friendIntervalMin;
+    const friendMax = friendIntervalMax == null ? friendInterval : friendIntervalMax;
+
+    run(
+        `INSERT INTO users (
+            uin, nickname, platform,
+            farm_interval, farm_interval_min, farm_interval_max,
+            friend_interval, friend_interval_min, friend_interval_max
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [uin, nickname, platform, farmMin, farmMin, farmMax, friendMin, friendMin, friendMax]
+    );
     saveToFile();
     return getUserByUin(uin);
 }

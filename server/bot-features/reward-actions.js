@@ -541,18 +541,21 @@ const RewardActions = {
             const bagReply = await this._getBag();
             const items = this._getBagItems(bagReply);
 
+            let coupon = 0;
             let normalFert = 0, organicFert = 0;
             let normalPoints = 0, classicPoints = 0;
 
             for (const it of items) {
                 const id = toNum(it.id);
                 const count = toNum(it.count);
-                if (id === 1011) normalFert = count;
+                if (id === 1002) coupon = count;
+                else if (id === 1011) normalFert = count;
                 else if (id === 1012) organicFert = count;
                 else if (id === 3001) normalPoints = count;
                 else if (id === 3002) classicPoints = count;
             }
 
+            this.userState.coupon = coupon;
             this.userState.fertilizer = { normal: normalFert, organic: organicFert };
             this.userState.collectionPoints = { normal: normalPoints, classic: classicPoints };
 

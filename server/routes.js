@@ -9,6 +9,17 @@ const db = require('./database');
 const { signToken, hashPassword, authMiddleware, adminOnly, canAccessUin } = require('./auth');
 const gameConfig = require('../src/gameConfig');
 
+function normalizeIntervalRangeMs({ min, max, fallback = 10000 } = {}) {
+    const clamp = (v, fb) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return Math.min(86400000, Math.max(0, Math.floor(fb)));
+        return Math.min(86400000, Math.max(0, Math.floor(n)));
+    };
+    const minVal = clamp(min, fallback);
+    const maxVal = clamp(max, fallback);
+    return minVal <= maxVal ? { min: minVal, max: maxVal } : { min: maxVal, max: minVal };
+}
+
 // ============================================================
 //  认证 (不需要 token)
 // ============================================================
@@ -129,7 +140,17 @@ router.use(authMiddleware);
 /** POST /api/accounts/add-by-code - authCode 添加账号 (支持 QQ/微信) */
 router.post('/accounts/add-by-code', async (req, res) => {
     try {
-        const { code, uin: manualUin, platform, farmInterval, friendInterval } = req.body || {};
+        const {
+            code,
+            uin: manualUin,
+            platform,
+            farmInterval,
+            friendInterval,
+            farmIntervalMin,
+            farmIntervalMax,
+            friendIntervalMin,
+            friendIntervalMax,
+        } = req.body || {};
         if (!code) {
             return res.status(400).json({ ok: false, error: 'authCode 不能为空' });
         }
@@ -150,9 +171,28 @@ router.post('/accounts/add-by-code', async (req, res) => {
         let user = db.getUserByUin(uin);
         const inferredPlatform = uin.startsWith('wx_') ? 'wx' : 'qq';
         const actualPlatform = normalizedPlatform || user?.platform || inferredPlatform;
+        const farmRange = normalizeIntervalRangeMs({
+            min: farmIntervalMin !== undefined ? farmIntervalMin : farmInterval,
+            max: farmIntervalMax !== undefined ? farmIntervalMax : farmInterval,
+            fallback: user?.farm_interval_min || user?.farm_interval || 10000,
+        });
+        const friendRange = normalizeIntervalRangeMs({
+            min: friendIntervalMin !== undefined ? friendIntervalMin : friendInterval,
+            max: friendIntervalMax !== undefined ? friendIntervalMax : friendInterval,
+            fallback: user?.friend_interval_min || user?.friend_interval || 10000,
+        });
 
         if (!user) {
-            db.createUser({ uin, platform: actualPlatform, farmInterval: farmInterval || 10000, friendInterval: friendInterval || 10000 });
+            db.createUser({
+                uin,
+                platform: actualPlatform,
+                farmInterval: farmRange.min,
+                friendInterval: friendRange.min,
+                farmIntervalMin: farmRange.min,
+                farmIntervalMax: farmRange.max,
+                friendIntervalMin: friendRange.min,
+                friendIntervalMax: friendRange.max,
+            });
         } else {
             db.updateUser(uin, { platform: actualPlatform });
         }
@@ -170,8 +210,16 @@ router.post('/accounts/add-by-code', async (req, res) => {
             startOpts.preferredSeedId = user.preferred_seed_id || 0;
 
             // 如果前端没有明确传入指定值，则保留 DB 中已有的值
-            startOpts.farmInterval = farmInterval || user.farm_interval || 10000;
-            startOpts.friendInterval = friendInterval || user.friend_interval || 10000;
+            startOpts.farmInterval = farmRange.min;
+            startOpts.friendInterval = friendRange.min;
+            startOpts.farmIntervalRange = {
+                min: farmRange.min,
+                max: farmRange.max,
+            };
+            startOpts.friendIntervalRange = {
+                min: friendRange.min,
+                max: friendRange.max,
+            };
         }
 
         await botManager._startBot(uin, code, startOpts);
@@ -345,9 +393,27 @@ router.get('/accounts/:uin/snapshot', canAccessUin, (req, res) => {
                 ok: true, data: {
                     userId: user.uin, status: 'stopped',
                     platform: user.platform || 'qq',
-                    userState: { name: user.nickname, level: user.level, gold: user.gold, exp: user.exp, gid: user.gid },
+                    userState: {
+                        name: user.nickname,
+                        level: user.level,
+                        gold: user.gold,
+                        exp: user.exp,
+                        gid: user.gid,
+                        coupon: 0,
+                        fertilizer: { normal: 0, organic: 0 },
+                        collectionPoints: { normal: 0, classic: 0 },
+                    },
+                    levelProgress: gameConfig.getLevelExpProgress(user.level || 0, user.exp || 0),
                     farmInterval: user.farm_interval || 10000,
+                    farmIntervalMin: user.farm_interval_min || user.farm_interval || 10000,
+                    farmIntervalMax: user.farm_interval_max || user.farm_interval || 10000,
                     friendInterval: user.friend_interval || 10000,
+                    friendIntervalMin: user.friend_interval_min || user.friend_interval || 10000,
+                    friendIntervalMax: user.friend_interval_max || user.friend_interval || 10000,
+                    nextFarmCheckAt: 0,
+                    nextFriendCheckAt: 0,
+                    isCheckingFarm: false,
+                    isCheckingFriends: false,
                     featureToggles: user.feature_toggles ? JSON.parse(user.feature_toggles) : null,
                     dailyStats: user.daily_stats ? JSON.parse(user.daily_stats) : null,
                     preferredSeedId: user.preferred_seed_id || 0,

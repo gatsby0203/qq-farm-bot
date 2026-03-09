@@ -25,11 +25,15 @@
         />
       </el-form-item>
       <el-form-item label="农场巡查">
-        <el-input-number v-model="form.farmIntervalSec" :min="1" :max="3600" :step="5" />
+        <el-input-number v-model="form.farmIntervalMinSec" :min="0" :max="86400" :step="1" />
+        <span class="range-sep">~</span>
+        <el-input-number v-model="form.farmIntervalMaxSec" :min="0" :max="86400" :step="1" />
         <span class="unit-text">秒</span>
       </el-form-item>
       <el-form-item label="好友巡查">
-        <el-input-number v-model="form.friendIntervalSec" :min="1" :max="3600" :step="5" />
+        <el-input-number v-model="form.friendIntervalMinSec" :min="0" :max="86400" :step="1" />
+        <span class="range-sep">~</span>
+        <el-input-number v-model="form.friendIntervalMaxSec" :min="0" :max="86400" :step="1" />
         <span class="unit-text">秒</span>
       </el-form-item>
     </el-form>
@@ -70,8 +74,10 @@ const form = ref({
   uin: '',
   authCode: '',
   platform: 'qq',
-  farmIntervalSec: 10,
-  friendIntervalSec: 10,
+  farmIntervalMinSec: 10,
+  farmIntervalMaxSec: 10,
+  friendIntervalMinSec: 10,
+  friendIntervalMaxSec: 10,
 })
 
 watch(() => props.visible, (visible) => {
@@ -89,8 +95,10 @@ watch(() => props.visible, (visible) => {
 
   form.value.uin = ''
   form.value.platform = 'qq'
-  form.value.farmIntervalSec = 10
-  form.value.friendIntervalSec = 10
+  form.value.farmIntervalMinSec = 10
+  form.value.farmIntervalMaxSec = 10
+  form.value.friendIntervalMinSec = 10
+  form.value.friendIntervalMaxSec = 10
 })
 
 function handleSubmit() {
@@ -105,8 +113,15 @@ function handleSubmit() {
   }
 
   if (!props.initialUin) {
-    data.farmInterval = form.value.farmIntervalSec * 1000
-    data.friendInterval = form.value.friendIntervalSec * 1000
+    const farmRange = normalizeIntervalRangeSec(form.value.farmIntervalMinSec, form.value.farmIntervalMaxSec)
+    const friendRange = normalizeIntervalRangeSec(form.value.friendIntervalMinSec, form.value.friendIntervalMaxSec)
+    data.farmIntervalMin = farmRange.min * 1000
+    data.farmIntervalMax = farmRange.max * 1000
+    data.friendIntervalMin = friendRange.min * 1000
+    data.friendIntervalMax = friendRange.max * 1000
+    // 兼容旧后端字段
+    data.farmInterval = farmRange.min * 1000
+    data.friendInterval = friendRange.min * 1000
   }
 
   emit('confirm', data)
@@ -116,11 +131,27 @@ function handleClose() {
   emit('cancel')
   emit('update:visible', false)
 }
+
+function normalizeIntervalRangeSec(minVal, maxVal) {
+  const clamp = (v, fallback = 10) => {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return Math.min(86400, Math.max(0, Math.floor(fallback)))
+    return Math.min(86400, Math.max(0, Math.floor(n)))
+  }
+  const min = clamp(minVal)
+  const max = clamp(maxVal, min)
+  return min <= max ? { min, max } : { min: max, max: min }
+}
 </script>
 
 <style scoped>
 .unit-text {
   margin-left: 8px;
+  color: var(--text-muted);
+}
+
+.range-sep {
+  margin: 0 8px;
   color: var(--text-muted);
 }
 </style>

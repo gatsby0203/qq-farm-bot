@@ -406,16 +406,23 @@ const FriendActions = {
     },
 
     async friendCheckLoop() {
+        if (this.friendLoopTaskRunning) return;
+        this.friendLoopTaskRunning = true;
         while (this.friendLoopRunning) {
             await this.checkFriends();
             if (!this.friendLoopRunning) break;
-            await sleep(this.friendInterval);
+            const delay = this._getRandomDelayMs(this.friendIntervalRange || { min: this.friendInterval, max: this.friendInterval });
+            await this._waitLoopDelay('friend', delay);
         }
+        this.friendLoopTaskRunning = false;
+        this.nextFriendCheckAt = 0;
+        this._friendDelayController = null;
     },
 
     startFriendLoop() {
         if (this.friendLoopRunning) return;
         this.friendLoopRunning = true;
+        this.nextFriendCheckAt = Date.now() + 5000;
         this.friendCheckTimer = setTimeout(() => this.friendCheckLoop(), 5000);
     },
 
