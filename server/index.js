@@ -8,6 +8,10 @@
 // 加载 .env 配置（本地开发，不影响已有环境变量）
 require('dotenv').config();
 
+// ---------- 初始化安全配置 (必须在任何使用密文和 JWT 的模块前运行) ----------
+const { ensureSecureKeys } = require('./secure-setup');
+ensureSecureKeys();
+
 const path = require('path');
 const express = require('express');
 const http = require('http');

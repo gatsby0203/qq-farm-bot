@@ -1,5 +1,5 @@
 # ============ 阶段1: 构建前端 ============
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/web
 
@@ -12,7 +12,7 @@ COPY web/ ./
 RUN npm run build
 
 # ============ 阶段2: 生产运行 ============
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 

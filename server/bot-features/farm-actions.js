@@ -6,7 +6,7 @@
 const { types } = require('../../src/proto');
 const { getPlantName, getPlantNameBySeedId, getPlantGrowTime, getPlantBySeedId } = require('../../src/gameConfig');
 const { NORMAL_FERTILIZER_ID } = require('./constants'); // 待稍后统一抽取
-const { sleep, toLong, toNum, nowStr } = require('./utils');
+const { sleep, sleepJitter, toLong, toNum, nowStr } = require('./utils');
 
 const FarmActions = {
     async getAllLands() {
@@ -68,7 +68,7 @@ const FarmActions = {
                 this.logWarn('农场', `施肥失败: ${e.message}`);
                 break;
             }
-            if (landIds.length > 1) await sleep(50);
+            if (landIds.length > 1) await sleepJitter(300, 800);
         }
         return successCount;
     },

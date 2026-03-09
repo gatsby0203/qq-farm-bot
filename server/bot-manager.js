@@ -257,7 +257,15 @@ class BotManager extends EventEmitter {
     getBotLogs(uin, limit = 100) {
         const bot = this.bots.get(uin);
         if (bot) return bot.getRecentLogs(limit);
-        return db.getRecentLogs(uin, limit);
+
+        // 如果 Bot 没有在运行，从 SQLite 数据库中读取
+        return db.getRecentLogs(uin, limit).map(row => ({
+            uin: row.user_uin,
+            tag: row.tag,
+            msg: row.message,
+            level: row.level,
+            time: row.created_at
+        }));
     }
 
     /**

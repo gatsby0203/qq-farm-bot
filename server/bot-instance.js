@@ -12,7 +12,7 @@ const EventEmitter = require('events');
 const WebSocket = require('ws');
 const { types } = require('../src/proto');
 const { CONFIG } = require('../src/config');
-const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById, getPlantExp, getLevelExpProgress } = require('../src/gameConfig');
+const { getPlantNameBySeedId, getPlantName, getFruitName, getPlantById, getPlantExp, getLevelExpProgress, getItemInfo } = require('../src/gameConfig');
 const cryptoWasm = require('./utils/crypto-wasm');
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +20,7 @@ const path = require('path');
 // 导入工具与常量
 const { toNum, toLong, nowStr, sleep, isFruitId } = require('./bot-features/utils');
 const { PLATFORMS, PHASE_NAMES, PlantPhase, GOLD_ITEM_ID, NORMAL_FERTILIZER_ID, TAG_ICONS } = require('./bot-features/constants');
+const db = require('./database');
 
 // 导入 Mixins
 const FarmActions = require('./bot-features/farm-actions');
@@ -249,6 +250,9 @@ class BotInstance extends EventEmitter {
         this._logs.push(entry);
         if (this._logs.length > this.MAX_LOGS) this._logs.shift();
         this.emit('log', { userId: this.userId, ...entry });
+
+        // 将日志落到数据库中 (已使用 node22 高性能 SQLite)
+        db.addLog(this.userId, entry.tag, entry.msg, entry.level);
     }
     getRecentLogs(n = 100) { return this._logs.slice(-n); }
 
@@ -660,8 +664,8 @@ class BotInstance extends EventEmitter {
             if (phaseVal === PlantPhase.MATURE) {
                 if (plant.harvestable) result.harvestable.push(id);
                 else result.growing.push(id);
-                        continue;
-                    }
+                continue;
+            }
             if (phaseVal === PlantPhase.DEAD) { result.dead.push(id); continue; }
             result.growing.push(id);
             if (toNum(plant.dry_num) > 0) result.needWater.push(id);
@@ -684,7 +688,7 @@ class BotInstance extends EventEmitter {
                 }
             }
             throw new Error(`仓库中没有指定的种子 (ID: ${seedIdNum})`);
-    }
+        }
 
         const body = types.BagRequest.encode(types.BagRequest.create({})).finish();
         const { body: replyBody } = await this.sendMsgAsync('gamepb.itempb.ItemService', 'Bag', body);
@@ -710,8 +714,8 @@ class BotInstance extends EventEmitter {
                         maxExp = exp; bestSeedId = itemId; seedCount = count;
                     }
                 } catch (e) { }
+            }
         }
-    }
 
         if (!bestSeedId) {
             this.logWarn('仓库', '仓库无种子！准备购买...');
@@ -721,7 +725,7 @@ class BotInstance extends EventEmitter {
     }
 
     async plantSeed(landIds, seedId) {
-                try {
+        try {
             const seedIdNum = Number(seedId);
             const body = types.PlantPlantRequest.encode(types.PlantPlantRequest.create({
                 land_ids: landIds.map(id => toLong(id)), seed_id: toLong(seedIdNum),
@@ -765,9 +769,9 @@ class BotInstance extends EventEmitter {
                     if (!name) continue;
                     const exp = getPlantExp(name);
                     if (exp > maxExp) { maxExp = exp; bestItem = { goodsId: toNum(mallGoods.goods_id), itemId, price }; }
-                    }
+                }
             } catch (e) { }
-            }
+        }
 
         if (!bestItem) throw new Error(`找不到可买的种子（金币不足或等级不够）我的等级=${myLevel}, 金币=${myGold}`);
 
@@ -796,6 +800,28 @@ class BotInstance extends EventEmitter {
         this.dailyStats.harvestCount += landIds.length;
         this.emit('statsUpdate', { userId: this.userId, dailyStats: this.dailyStats });
         this._applyHarvestRewards(reply?.items || []);
+
+        // 记录统计数据 (按作物种类聚合)
+        const cropCounts = {};
+        for (const item of reply?.items || []) {
+            const itemId = toNum(item.id);
+            // 忽略纯金币和经验
+            if (itemId === 1 || itemId === 1001 || itemId === 2 || itemId === 1101) continue;
+
+            const name = getFruitName(itemId) || `未知果实(${item.id})`;
+            const count = toNum(item.count);
+            const itemInfo = getItemInfo(itemId);
+            const itemPrice = itemInfo && itemInfo.price ? itemInfo.price : 0;
+            const gold = count * itemPrice;
+
+            if (!cropCounts[name]) cropCounts[name] = { count: 0, gold: 0 };
+            cropCounts[name].count += count;
+            cropCounts[name].gold += gold;
+        }
+        for (const [name, data] of Object.entries(cropCounts)) {
+            db.addStatistic(this.userId, 'harvest', data.count, name, data.gold);
+        }
+
         return landIds.length;
     }
 
@@ -1008,10 +1034,10 @@ class BotInstance extends EventEmitter {
                 try {
                     await this.unlockLand(toNum(nextLand.id), false);
                     this.log('解锁', `🔓 成功解锁土地 (ID: ${toNum(nextLand.id)})!`);
-        } catch (e) {
+                } catch (e) {
                     // ignore if lack of resources
-        }
-    }
+                }
+            }
         }
     }
 

@@ -6,7 +6,7 @@
 const { types } = require('../../src/proto');
 const { getPlantName, getFruitName, getItemInfo } = require('../../src/gameConfig');
 const { PlantPhase } = require('./constants');
-const { sleep, toLong, toNum } = require('./utils');
+const { sleep, sleepJitter, toLong, toNum } = require('./utils');
 const db = require('../database');
 
 function parseTimeToMinutes(value) {
@@ -222,7 +222,7 @@ const FriendActions = {
                 let ok = 0;
                 for (const landId of status.needWeed) {
                     try { await this.helpWeed(gid, [landId]); ok++; } catch (e) { this.logWarn('辅助', `除草失败: ${e.message}`); }
-                    await sleep(100);
+                    await sleepJitter(300, 600);
                 }
                 if (ok > 0) { actions.push(`🌿除草×${ok}`); totalActions.weed += ok; this.dailyStats.helpWeed += ok; }
             } else {
@@ -236,7 +236,7 @@ const FriendActions = {
                 let ok = 0;
                 for (const landId of status.needBug) {
                     try { await this.helpInsecticide(gid, [landId]); ok++; } catch (e) { this.logWarn('辅助', `除虫失败: ${e.message}`); }
-                    await sleep(100);
+                    await sleepJitter(300, 600);
                 }
                 if (ok > 0) { actions.push(`🐛除虫×${ok}`); totalActions.bug += ok; this.dailyStats.helpPest += ok; }
             } else {
@@ -250,7 +250,7 @@ const FriendActions = {
                 let ok = 0;
                 for (const landId of status.needWater) {
                     try { await this.helpWater(gid, [landId]); ok++; } catch (e) { this.logWarn('辅助', `浇水失败: ${e.message}`); }
-                    await sleep(100);
+                    await sleepJitter(300, 600);
                 }
                 if (ok > 0) { actions.push(`💦浇水×${ok}`); totalActions.water += ok; this.dailyStats.helpWater += ok; }
             } else {
@@ -271,7 +271,7 @@ const FriendActions = {
                         totalStolenItems.push(...reply.items);
                     }
                 } catch (e) { this.logWarn('偷菜', `偷取失败: ${e.message}`); }
-                await sleep(100);
+                await sleepJitter(400, 800);
             }
             if (ok > 0) {
                 const plantNames = [...new Set(stolenPlants)].join('/');
@@ -385,7 +385,7 @@ const FriendActions = {
             const totalActions = { steal: 0, water: 0, weed: 0, bug: 0 };
             for (const friend of friendsToVisit) {
                 try { await this.visitFriend(friend, totalActions); } catch (e) { this.logWarn('好友', `访问出错: ${e.message}`); }
-                await sleep(500);
+                await sleepJitter(1000, 2500); // 访问不同的好友，间隔必须要长一点防止查水表
             }
 
             const summary = [];

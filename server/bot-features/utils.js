@@ -6,12 +6,23 @@ function toLong(val) { return Long.isLong(val) ? val : Long.fromValue(val || 0);
 function toNum(val) { return Long.isLong(val) ? val.toNumber() : Number(val || 0); }
 
 function nowStr() {
-    return new Date().toLocaleString('zh-CN', {
-        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
+    return new Date().toLocaleString('zh-CN', { hour12: false });
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * sleepJitter - 随机延迟函数，用于防封控
+ * @param {number} min 最小毫秒数
+ * @param {number} max 最大毫秒数
+ */
+function sleepJitter(min, max) {
+    const ms = Math.floor(Math.random() * (max - min + 1)) + min;
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function isFruitId(id) { return FRUIT_ID_SET.has(Number(id)); }
 
 module.exports = {
@@ -19,5 +30,6 @@ module.exports = {
     toNum,
     nowStr,
     sleep,
+    sleepJitter,
     isFruitId
 };

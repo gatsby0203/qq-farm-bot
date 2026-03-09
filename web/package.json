@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "echarts": "^6.0.0",
-    "element-plus": "^2.9.1",
+    "element-plus": "^2.13.5",
     "pinia": "^3.0.4",
-    "socket.io-client": "^4.8.1",
-    "vue": "^3.5.13",
+    "socket.io-client": "^4.8.3",
+    "vue": "^3.5.29",
     "vue-echarts": "^8.0.1",
-    "vue-router": "^4.6.4"
+    "vue-router": "^5.0.3"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

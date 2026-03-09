@@ -1,23 +1,36 @@
 /**
  * SQLite 数据库层 - 用户会话与状态持久化
- * 使用 sql.js (纯 JS SQLite, 无需 native 编译)
+ * 使用 Node.js 22+ 内置的 node:sqlite, 无需 native 编译且支持完全增量写入及 WAL 高并发模式。
  */
 
-const initSqlJs = require('sql.js');
+const { DatabaseSync } = require('node:sqlite');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
-// 加密密钥 (生产环境应从环境变量读取)
-const ENCRYPTION_KEY = process.env.BOT_ENCRYPT_KEY || 'qq-farm-bot-default-key-32bytes!';
+// 加密密钥 (已由 secure-setup.js 确保必定存在)
+const ENCRYPTION_KEY = process.env.BOT_ENCRYPT_KEY;
+if (!ENCRYPTION_KEY) {
+    throw new Error('FATAL: BOT_ENCRYPT_KEY 环境变量缺失！请检查启动日志。');
+}
 const IV_LENGTH = 16;
 
 // ============ 加密/解密工具 ============
 
+// 缓存派生密钥，避免每次同步调用消耗大量 CPU 阻塞事件循环
+let CACHED_CRYPTO_KEY = null;
+
+function getCryptoKey() {
+    if (!CACHED_CRYPTO_KEY) {
+        CACHED_CRYPTO_KEY = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    }
+    return CACHED_CRYPTO_KEY;
+}
+
 function encrypt(text) {
     if (!text) return '';
     const iv = crypto.randomBytes(IV_LENGTH);
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    const key = getCryptoKey();
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -29,7 +42,7 @@ function decrypt(text) {
     try {
         const parts = text.split(':');
         const iv = Buffer.from(parts.shift(), 'hex');
-        const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+        const key = getCryptoKey();
         const encryptedText = parts.join(':');
         const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
@@ -40,61 +53,53 @@ function decrypt(text) {
     }
 }
 
+
 // ============ 数据库核心 ============
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'farm-bot.db');
 let db = null;
 
-/** 将 sql.js 查询结果转为对象数组 */
 function queryAll(sql, params = []) {
-    const stmt = db.prepare(sql);
-    if (params.length) stmt.bind(params);
-    const rows = [];
-    while (stmt.step()) {
-        rows.push(stmt.getAsObject());
+    try {
+        const stmt = db.prepare(sql);
+        return stmt.all(...params);
+    } catch (e) {
+        console.error('[DB] 查询错误 (All):', sql, params, e.message);
+        return [];
     }
-    stmt.free();
-    return rows;
 }
 
-/** 查询单行 */
 function queryOne(sql, params = []) {
-    const rows = queryAll(sql, params);
-    return rows.length > 0 ? rows[0] : null;
+    try {
+        const stmt = db.prepare(sql);
+        return stmt.get(...params);
+    } catch (e) {
+        console.error('[DB] 查询错误 (One):', sql, params, e.message);
+        return null;
+    }
 }
 
-/** 执行写操作 */
 function run(sql, params = []) {
-    db.run(sql, params);
+    try {
+        const stmt = db.prepare(sql);
+        stmt.run(...params);
+    } catch (e) {
+        console.error('[DB] 执行错误:', sql, params, e.message);
+    }
 }
-
-/** 持久化到磁盘 */
-function saveToFile() {
-    if (!db) return;
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const data = db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
-}
-
-// 定期自动保存 (每 30 秒)
-let saveTimer = null;
 
 async function initDatabase() {
-    const SQL = await initSqlJs();
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    // 如果数据库文件已存在则加载
-    if (fs.existsSync(DB_PATH)) {
-        const fileBuffer = fs.readFileSync(DB_PATH);
-        db = new SQL.Database(fileBuffer);
-    } else {
-        const dir = path.dirname(DB_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        db = new SQL.Database();
-    }
+    // 初始化 node:sqlite 实例
+    db = new DatabaseSync(DB_PATH);
+
+    // 启用 WAL 模式大幅提升读写并发性能
+    db.exec('PRAGMA journal_mode = WAL;');
 
     // 创建用户表
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uin TEXT UNIQUE NOT NULL,
@@ -123,7 +128,7 @@ async function initDatabase() {
     `);
 
     // 创建日志表
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS bot_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_uin TEXT NOT NULL,
@@ -135,7 +140,7 @@ async function initDatabase() {
     `);
 
     // 创建管理用户表 (Web 登录用)
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS admin_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -147,30 +152,29 @@ async function initDatabase() {
     `);
 
     // 创建统计表
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS bot_statistics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_uin TEXT NOT NULL,
             action TEXT NOT NULL,
             amount INTEGER DEFAULT 0,
             target TEXT DEFAULT '',
+            gold INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         )
     `);
 
     // 尝试添加 gold 字段，兼容旧数据表
-    try {
-        db.run(`ALTER TABLE bot_statistics ADD COLUMN gold INTEGER DEFAULT 0`);
-    } catch (e) { }
+    try { db.exec(`ALTER TABLE bot_statistics ADD COLUMN gold INTEGER DEFAULT 0`); } catch (e) { }
 
     // 索引
-    db.run(`CREATE INDEX IF NOT EXISTS idx_users_uin ON users(uin)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_logs_uin ON bot_logs(user_uin)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_logs_created ON bot_logs(created_at)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_stats_uin_created ON bot_statistics(user_uin, created_at)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_users_uin ON users(uin)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_uin ON bot_logs(user_uin)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_logs_created ON bot_logs(created_at)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_stats_uin_created ON bot_statistics(user_uin, created_at)`);
 
     // 创建公告表
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS announcements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT DEFAULT '',
@@ -182,7 +186,7 @@ async function initDatabase() {
     `);
 
     // 创建系统设置表
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS system_settings (
             key TEXT PRIMARY KEY,
             value TEXT DEFAULT ''
@@ -190,7 +194,7 @@ async function initDatabase() {
     `);
 
     // 创建用户推送设置表 (每个用户独立的推送配置)
-    db.run(`
+    db.exec(`
         CREATE TABLE IF NOT EXISTS user_notification_settings (
             admin_user_id INTEGER PRIMARY KEY,
             mail_to TEXT DEFAULT '',
@@ -207,13 +211,13 @@ async function initDatabase() {
     `);
 
     // 迁移: 添加 preferred_seed_id 列
-    try { db.run(`ALTER TABLE users ADD COLUMN preferred_seed_id INTEGER DEFAULT 0`); } catch (e) { /* 列已存在 */ }
-    try { db.run(`ALTER TABLE users ADD COLUMN farm_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
-    try { db.run(`ALTER TABLE users ADD COLUMN farm_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
-    try { db.run(`ALTER TABLE users ADD COLUMN friend_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
-    try { db.run(`ALTER TABLE users ADD COLUMN friend_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN preferred_seed_id INTEGER DEFAULT 0`); } catch (e) { /* 列已存在 */ }
+    try { db.exec(`ALTER TABLE users ADD COLUMN farm_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN farm_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN friend_interval_min INTEGER DEFAULT 10000`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN friend_interval_max INTEGER DEFAULT 10000`); } catch (e) { }
     try {
-        db.run(`
+        db.exec(`
             UPDATE users
             SET farm_interval_min = COALESCE(farm_interval, 10000),
                 farm_interval_max = COALESCE(farm_interval, 10000)
@@ -221,7 +225,7 @@ async function initDatabase() {
         `);
     } catch (e) { }
     try {
-        db.run(`
+        db.exec(`
             UPDATE users
             SET friend_interval_min = COALESCE(friend_interval, 10000),
                 friend_interval_max = COALESCE(friend_interval, 10000)
@@ -230,16 +234,11 @@ async function initDatabase() {
     } catch (e) { }
 
     // 迁移: 添加持久化配置与统计列
-    try { db.run(`ALTER TABLE users ADD COLUMN feature_toggles TEXT DEFAULT ''`); } catch (e) { }
-    try { db.run(`ALTER TABLE users ADD COLUMN daily_stats TEXT DEFAULT ''`); } catch (e) { }
-    try { db.run(`ALTER TABLE users ADD COLUMN daily_reward_state TEXT DEFAULT ''`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN feature_toggles TEXT DEFAULT ''`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN daily_stats TEXT DEFAULT ''`); } catch (e) { }
+    try { db.exec(`ALTER TABLE users ADD COLUMN daily_reward_state TEXT DEFAULT ''`); } catch (e) { }
 
-    saveToFile();
-
-    // 自动保存定时器
-    saveTimer = setInterval(saveToFile, 30000);
-
-    console.log('[DB] SQLite 数据库已初始化');
+    console.log('[DB] SQLite 数据库已初始化 (Node 22 Built-in Native mode, WAL active)');
     return db;
 }
 
@@ -281,7 +280,6 @@ function createUser({
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [uin, nickname, platform, farmMin, farmMin, farmMax, friendMin, friendMin, friendMax]
     );
-    saveToFile();
     return getUserByUin(uin);
 }
 
@@ -300,7 +298,6 @@ function updateUser(uin, updates) {
     fields.push("updated_at = datetime('now','localtime')");
     values.push(uin);
     run(`UPDATE users SET ${fields.join(', ')} WHERE uin = ?`, values);
-    saveToFile();
     return getUserByUin(uin);
 }
 
@@ -333,7 +330,6 @@ function getSession(uin) {
 function deleteUser(uin) {
     run('DELETE FROM users WHERE uin = ?', [uin]);
     run('DELETE FROM bot_logs WHERE user_uin = ?', [uin]);
-    saveToFile();
 }
 
 // ============ 日志持久化 ============
@@ -353,7 +349,6 @@ function getRecentLogs(uin, limit = 100) {
 function cleanOldLogs(daysToKeep = 7) {
     run(`DELETE FROM bot_logs WHERE created_at < datetime('now', '-${daysToKeep} days', 'localtime')`);
     run(`DELETE FROM bot_statistics WHERE created_at < datetime('now', '-${daysToKeep} days', 'localtime')`);
-    saveToFile();
 }
 
 // ============ 统计持久化 ============
@@ -480,7 +475,7 @@ function getDailyStatistics(uin, daysLimit = 7) {
 // ============ 自动启动用户列表 ============
 
 function getAutoStartUsers() {
-    return queryAll('SELECT * FROM users WHERE auto_start = 1 AND session_data != ""');
+    return queryAll("SELECT * FROM users WHERE auto_start = 1 AND session_data != ''");
 }
 
 // ============ 管理用户 (Web 登录) ============
@@ -500,7 +495,6 @@ function getAllAdminUsers() {
 function createAdminUser({ username, passwordHash, role = 'user', allowedUins = '' }) {
     run(`INSERT INTO admin_users (username, password_hash, role, allowed_uins) VALUES (?, ?, ?, ?)`,
         [username, passwordHash, role, allowedUins]);
-    saveToFile();
     return getAdminUser(username);
 }
 
@@ -514,12 +508,10 @@ function updateAdminUser(id, updates) {
     if (fields.length === 0) return;
     values.push(id);
     run(`UPDATE admin_users SET ${fields.join(', ')} WHERE id = ?`, values);
-    saveToFile();
 }
 
 function deleteAdminUser(id) {
     run('DELETE FROM admin_users WHERE id = ?', [id]);
-    saveToFile();
 }
 
 // ============ 公告 ============
@@ -536,7 +528,6 @@ function saveAnnouncement({ title, content }) {
     } else {
         run(`INSERT INTO announcements (title, content) VALUES (?, ?)`, [title, content]);
     }
-    saveToFile();
     return getAnnouncement();
 }
 
@@ -556,7 +547,6 @@ function setRegistrationEnabled(enabled) {
     } else {
         run(`INSERT INTO system_settings (key, value) VALUES ('registration_enabled', ?)`, [enabled ? '1' : '0']);
     }
-    saveToFile();
 }
 
 function getMailSettings() {
@@ -591,7 +581,6 @@ function saveMailSettings(mailTo, mailEnabled, serverChanEnabled, serverChanType
     // 如果传了类型和key，将其也视为全局通道信息一并更新
     if (serverChanType !== undefined) upsert('report_serverchan_type', serverChanType);
     if (serverChanKey !== undefined) upsert('report_serverchan_key', serverChanKey);
-    saveToFile();
 }
 
 // ============ 汇报设置 ============
@@ -626,7 +615,6 @@ function saveReportSettings(hourlyEnabled, dailyEnabled, pushEmailEnabled, serve
     // 向后兼容：如果在汇报设置里提交了全局通道数据，也将其写入
     if (serverChanType !== undefined) upsert('report_serverchan_type', serverChanType);
     if (serverChanKey !== undefined) upsert('report_serverchan_key', serverChanKey);
-    saveToFile();
 }
 
 // ============ 汇报统计查询 ============
@@ -794,7 +782,6 @@ function saveUserNotificationSettings(adminUserId, s) {
              report_hourly_enabled, report_daily_enabled, report_push_email, report_push_sc, report_uins)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [adminUserId, ...vals]);
     }
-    saveToFile();
 }
 
 /** 获取所有已启用汇报的用户设置列表 */
@@ -840,9 +827,7 @@ function getDisconnectAlertUsers(uin) {
 }
 
 function closeDatabase() {
-    if (saveTimer) { clearInterval(saveTimer); saveTimer = null; }
     if (db) {
-        saveToFile();
         db.close();
         db = null;
     }

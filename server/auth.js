@@ -5,7 +5,12 @@
 const crypto = require('crypto');
 const db = require('./database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'qq-farm-bot-jwt-secret-key-2026';
+// 该变量已在 server/index.js 启动时由 secure-setup.js 保证提供并注入 process.env
+// 若异常缺失则直接抛错，而非使用通用弱密码
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error('FATAL: JWT_SECRET 环境变量缺失！请检查启动日志。');
+}
 
 // ============ 简易 JWT 实现 (无外部依赖) ============
 

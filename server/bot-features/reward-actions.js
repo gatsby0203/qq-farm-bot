@@ -5,7 +5,7 @@
 
 const { types } = require('../../src/proto');
 const { getItemName } = require('../../src/gameConfig');
-const { toLong, toNum, sleep } = require('./utils');
+const { toLong, toNum, sleep, sleepJitter } = require('./utils');
 
 const RewardActions = {
     async checkAndClaimTasks() {
@@ -47,7 +47,7 @@ const RewardActions = {
                         return `${getItemName(id)} ×${count}`;
                     });
                     this.log('任务', `✅ 领取成功: ${task.desc} → ${rewardParts.join(' | ') || '无奖励'}`);
-                    await sleep(300);
+                    await sleepJitter(300, 800);
                 } catch (e) { this.logWarn('任务', `领取失败 #${task.id}: ${e.message}`); }
             }
         } catch (e) { this.logWarn('任务', `检查任务状态失败: ${e.message}`); }
@@ -151,7 +151,7 @@ const RewardActions = {
                         ).finish();
                         await this.sendMsgAsync('gamepb.mallpb.MallService', 'Purchase', purchaseReq);
                         claimed++;
-                        await sleep(200);
+                        await sleepJitter(400, 1000);
                     }
                 } catch (e) { this.logWarn('商城', `单个商品解析失败: ${e.message}`); }
             }
@@ -185,7 +185,7 @@ const RewardActions = {
 
             const reportReq = types.ReportShareRequest.encode(types.ReportShareRequest.create({ shared: true })).finish();
             await this.sendMsgAsync('gamepb.sharepb.ShareService', 'ReportShare', reportReq);
-            await sleep(300);
+            await sleepJitter(400, 1000);
 
             const claimReq = types.ClaimShareRewardRequest.encode(types.ClaimShareRewardRequest.create({ claimed: true })).finish();
             const { body: claimBody } = await this.sendMsgAsync('gamepb.sharepb.ShareService', 'ClaimShareReward', claimReq);
@@ -239,7 +239,7 @@ const RewardActions = {
                     const claimReply = types.ClaimMonthCardRewardReply.decode(claimBody);
                     this.log('月卡', `📅 月卡奖励已领取: ${this._getRewardSummary(claimReply.items)}`);
                     claimed++;
-                    await sleep(300);
+                    await sleepJitter(400, 900);
                 } catch (e) { this.logWarn('月卡', `单个月卡领取异常: ${e.message}`); }
             }
 
@@ -297,7 +297,7 @@ const RewardActions = {
                         claimed++;
                     } catch (e2) { this.logWarn('邮箱', `领取邮件补偿失败: ${e2.message}`); }
                 }
-                await sleep(100);
+                await sleepJitter(300, 800);
             }
 
             if (claimed > 0) {
@@ -387,7 +387,7 @@ const RewardActions = {
                     ).finish();
                     await this.sendMsgAsync('gamepb.mallpb.MallService', 'Purchase', purchaseReq);
                     totalBought += BUY_PER_ROUND;
-                    await sleep(100);
+                    await sleepJitter(500, 1500); // 买化肥频率不能过高
                 } catch (e) {
                     if (e.message.includes('余额不足') || e.message.includes('点券不足') ||
                         e.message.includes('1000019') || e.message.includes('不足')) {
@@ -493,7 +493,7 @@ const RewardActions = {
                         this.logWarn('包裹', `化肥使用异常拦截: ${e2.message}`);
                     }
                 }
-                await sleep(100);
+                await sleepJitter(500, 1200);
             }
 
             if (used > 0) {
