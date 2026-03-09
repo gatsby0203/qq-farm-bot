@@ -375,21 +375,46 @@ const pieChartOption = computed(() => {
   const cropMap = {};
   let totalGold = 0;
   statsData.value.forEach(row => {
-     (row.harvest.details || []).forEach(d => {
-        cropMap[d.name] = (cropMap[d.name] || 0) + (d.gold || 0);
-        totalGold += d.gold || 0;
+     (row.harvest?.details || []).forEach(d => {
+        const gold = Number(d.gold) || 0;
+        cropMap[d.name] = (cropMap[d.name] || 0) + gold;
+        totalGold += gold;
      });
-     (row.steal.details || []).forEach(d => {
+     (row.steal?.details || []).forEach(d => {
         // 去除名字里的好友前缀 (例如 "张三: 白萝卜" -> "白萝卜")
         let name = d.name.includes(': ') ? d.name.split(': ')[1] : d.name;
-        cropMap[name] = (cropMap[name] || 0) + (d.gold || 0);
-        totalGold += d.gold || 0;
+        const gold = Number(d.gold) || 0;
+        cropMap[name] = (cropMap[name] || 0) + gold;
+        totalGold += gold;
      });
   });
 
-  if (totalGold === 0) {
+  if (totalGold === 0 || Object.keys(cropMap).length === 0) {
     return {
-      title: { text: '暂无收益', left: 'center', top: 'center', textStyle: { color: '#ccc', fontSize: 14 } }
+      title: {
+        text: '0 金币',
+        subtext: '暂无收益数据',
+        left: 'center',
+        top: '38%',
+        textStyle: { color: '#909399', fontSize: 16, fontWeight: 'bold' },
+        subtextStyle: { color: '#c0c4cc', fontSize: 12 }
+      },
+      tooltip: { show: false },
+      legend: { show: false },
+      series: [
+        {
+          name: '无收益数据',
+          type: 'pie',
+          radius: ['40%', '70%'],
+          center: ['50%', '45%'],
+          avoidLabelOverlap: false,
+          itemStyle: { color: '#f4f4f5', borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+          label: { show: false },
+          emphasis: { scale: false, label: { show: false } },
+          labelLine: { show: false },
+          data: [{ value: 0, name: '无数据' }]
+        }
+      ]
     };
   }
 
@@ -402,6 +427,7 @@ const pieChartOption = computed(() => {
   }
 
   return {
+    title: { show: false }, // 明确覆盖残余的 Text
     tooltip: { trigger: 'item', formatter: '{b} <br/> {c} 金币 ({d}%)' },
     legend: { orient: 'horizontal', bottom: '0%' },
     series: [

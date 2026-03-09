@@ -79,13 +79,23 @@ async function main() {
 
     // 静态文件 - 前端打包产物
     const distPath = path.join(__dirname, '..', 'web', 'dist');
+    const indexFile = path.join(distPath, 'index.html');
+
     if (fs.existsSync(distPath)) {
         app.use(express.static(distPath));
+
         // SPA fallback
-        app.get('*', (req, res) => {
-            if (!req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
-                res.sendFile(path.join(distPath, 'index.html'));
+        app.get('/{*splat}', (req, res, next) => {
+            if (
+                req.path.startsWith('/api') ||
+                req.path.startsWith('/socket.io') ||
+                path.extname(req.path) ||
+                !req.accepts('html')
+            ) {
+                return next();
             }
+
+            res.sendFile(indexFile);
         });
     } else {
         console.log('[Server] 前端未构建, 请运行 npm run build:web');
